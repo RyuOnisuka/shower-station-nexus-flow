@@ -9,7 +9,228 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      daily_stats: {
+        Row: {
+          cancelled_queues: number | null
+          completed_queues: number | null
+          created_at: string
+          date: string
+          id: string
+          peak_hour: number | null
+          total_queues: number | null
+          total_revenue: number | null
+          updated_at: string
+        }
+        Insert: {
+          cancelled_queues?: number | null
+          completed_queues?: number | null
+          created_at?: string
+          date: string
+          id?: string
+          peak_hour?: number | null
+          total_queues?: number | null
+          total_revenue?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cancelled_queues?: number | null
+          completed_queues?: number | null
+          created_at?: string
+          date?: string
+          id?: string
+          peak_hour?: number | null
+          total_queues?: number | null
+          total_revenue?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      lockers: {
+        Row: {
+          created_at: string
+          current_queue_id: string | null
+          id: string
+          location: string
+          locker_number: string
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_queue_id?: string | null
+          id?: string
+          location: string
+          locker_number: string
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_queue_id?: string | null
+          id?: string
+          location?: string
+          locker_number?: string
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lockers_current_queue_id_fkey"
+            columns: ["current_queue_id"]
+            isOneToOne: false
+            referencedRelation: "queues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          id: string
+          payment_method: string | null
+          queue_id: string
+          slip_url: string | null
+          status: string | null
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          id?: string
+          payment_method?: string | null
+          queue_id: string
+          slip_url?: string | null
+          status?: string | null
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          id?: string
+          payment_method?: string | null
+          queue_id?: string
+          slip_url?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_queue_id_fkey"
+            columns: ["queue_id"]
+            isOneToOne: false
+            referencedRelation: "queues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      queues: {
+        Row: {
+          called_at: string | null
+          cancelled_at: string | null
+          completed_at: string | null
+          created_at: string
+          id: string
+          locker_number: string | null
+          price: number
+          queue_number: string
+          service_type: string | null
+          started_at: string | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          called_at?: string | null
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          locker_number?: string | null
+          price?: number
+          queue_number: string
+          service_type?: string | null
+          started_at?: string | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          called_at?: string | null
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          locker_number?: string | null
+          price?: number
+          queue_number?: string
+          service_type?: string | null
+          started_at?: string | null
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "queues_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          created_at: string
+          email: string | null
+          employee_id: string | null
+          first_name: string
+          gender: string | null
+          guardian_phone: string | null
+          id: string
+          last_name: string
+          line_user_id: string | null
+          phone_number: string
+          restroom_pref: string | null
+          status: string | null
+          updated_at: string
+          user_type: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          employee_id?: string | null
+          first_name: string
+          gender?: string | null
+          guardian_phone?: string | null
+          id?: string
+          last_name: string
+          line_user_id?: string | null
+          phone_number: string
+          restroom_pref?: string | null
+          status?: string | null
+          updated_at?: string
+          user_type?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          employee_id?: string | null
+          first_name?: string
+          gender?: string | null
+          guardian_phone?: string | null
+          id?: string
+          last_name?: string
+          line_user_id?: string | null
+          phone_number?: string
+          restroom_pref?: string | null
+          status?: string | null
+          updated_at?: string
+          user_type?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
