@@ -28,6 +28,10 @@ const Login = () => {
     }
   };
 
+  const handleRegister = () => {
+    navigate('/register');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
@@ -58,6 +62,26 @@ const Login = () => {
               {isLoading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบด้วย LINE'}
             </Button>
           </form>
+          
+          {/* Registration Section */}
+          <div className="mt-6 text-center">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-muted-foreground">หรือ</span>
+              </div>
+            </div>
+            
+            <Button
+              variant="outline"
+              className="w-full mt-4"
+              onClick={handleRegister}
+            >
+              สมัครสมาชิกใหม่ 📝
+            </Button>
+          </div>
           
           <div className="mt-6 p-4 bg-blue-50 rounded-lg">
             <p className="text-sm text-blue-700 text-center">
