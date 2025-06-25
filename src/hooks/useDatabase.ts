@@ -71,7 +71,16 @@ export const useDailyStats = () => {
   });
 };
 
-// Hook สำหรับสร้างคิวใหม่
+// Function to generate queue number
+const generateQueueNumber = (gender: string, serviceType: string): string => {
+  const genderCode = gender === 'male' ? 'M' : 'F';
+  const serviceCode = serviceType === 'walk-in' ? 'W' : 'B';
+  // In real implementation, this should get the next number from database
+  const queueNum = String(Math.floor(Math.random() * 999) + 1).padStart(3, '0');
+  return `${genderCode}${serviceCode}-${queueNum}`;
+};
+
+// Hook สำหรับสร้างคิวใหม่ - Updated with new queue logic
 export const useCreateQueue = () => {
   const queryClient = useQueryClient();
   
@@ -82,6 +91,7 @@ export const useCreateQueue = () => {
       last_name: string;
       gender?: string;
       restroom_pref?: string;
+      service_type?: string;
     }) => {
       // สร้างหรือหาผู้ใช้
       let user;
@@ -96,7 +106,13 @@ export const useCreateQueue = () => {
       } else {
         const { data: newUser, error: userError } = await supabase
           .from('users')
-          .insert(userData)
+          .insert({
+            phone_number: userData.phone_number,
+            first_name: userData.first_name,
+            last_name: userData.last_name,
+            gender: userData.gender || 'unspecified',
+            restroom_pref: userData.restroom_pref || 'male'
+          })
           .select()
           .single();
         
@@ -104,8 +120,11 @@ export const useCreateQueue = () => {
         user = newUser;
       }
 
-      // สร้างหมายเลขคิว
-      const queueNumber = `MW-${String(Date.now()).slice(-3)}`;
+      // สร้างหมายเลขคิวตามเพศและประเภทการใช้งาน
+      const queueNumber = generateQueueNumber(
+        user.gender || 'unspecified', 
+        userData.service_type || 'walk-in'
+      );
 
       // สร้างคิว
       const { data: queue, error: queueError } = await supabase
@@ -113,6 +132,7 @@ export const useCreateQueue = () => {
         .insert({
           queue_number: queueNumber,
           user_id: user.id,
+          service_type: userData.service_type || 'walk-in',
           price: 50.00
         })
         .select()
@@ -128,15 +148,14 @@ export const useCreateQueue = () => {
   });
 };
 
-// Hook สำหรับอัปเดตสถานะคิว
+// Hook สำหรับอัปเดตสถานะคิว - Updated with auto locker assignment
 export const useUpdateQueueStatus = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ queueId, status, lockerNumber }: {
+    mutationFn: async ({ queueId, status }: {
       queueId: string;
       status: string;
-      lockerNumber?: string;
     }) => {
       const updateData: any = { status };
       
@@ -144,9 +163,59 @@ export const useUpdateQueueStatus = () => {
         updateData.called_at = new Date().toISOString();
       } else if (status === 'processing') {
         updateData.started_at = new Date().toISOString();
-        if (lockerNumber) updateData.locker_number = lockerNumber;
+        
+        // Auto-assign available locker based on user's restroom preference
+        const { data: queue } = await supabase
+          .from('queues')
+          .select('user:users(restroom_pref)')
+          .eq('id', queueId)
+          .single();
+
+        if (queue?.user?.restroom_pref) {
+          const location = queue.user.restroom_pref === 'male' 
+            ? 'Floor 1 - Male Section'
+            : 'Floor 1 - Female Section';
+          
+          const { data: availableLocker } = await supabase
+            .from('lockers')
+            .select('*')
+            .eq('status', 'available')
+            .ilike('location', `%${queue.user.restroom_pref === 'male' ? 'Male' : 'Female'}%`)
+            .limit(1)
+            .single();
+
+          if (availableLocker) {
+            updateData.locker_number = availableLocker.locker_number;
+            
+            // Update locker status
+            await supabase
+              .from('lockers')
+              .update({ 
+                status: 'occupied', 
+                current_queue_id: queueId 
+              })
+              .eq('id', availableLocker.id);
+          }
+        }
       } else if (status === 'completed') {
         updateData.completed_at = new Date().toISOString();
+        
+        // Free up the locker
+        const { data: currentQueue } = await supabase
+          .from('queues')
+          .select('locker_number')
+          .eq('id', queueId)
+          .single();
+
+        if (currentQueue?.locker_number) {
+          await supabase
+            .from('lockers')
+            .update({ 
+              status: 'available', 
+              current_queue_id: null 
+            })
+            .eq('locker_number', currentQueue.locker_number);
+        }
       }
 
       const { error } = await supabase

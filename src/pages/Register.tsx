@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,16 +15,30 @@ const Register = () => {
     phoneNumber: '',
     email: '',
     gender: 'unspecified',
-    restroomPref: 'unspecified',
+    restroomPref: 'male', // Default for unspecified gender
     userType: 'general',
     employeeId: '',
-    guardianPhone: ''
+    guardianEmployeeId: '' // Changed from guardianPhone to guardianEmployeeId
   });
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // Auto-assign restroom preference based on gender
+      if (field === 'gender') {
+        if (value === 'male') {
+          newData.restroomPref = 'male';
+        } else if (value === 'female') {
+          newData.restroomPref = 'female';
+        }
+        // For 'unspecified', keep the current restroomPref or default
+      }
+      
+      return newData;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,8 +58,8 @@ const Register = () => {
       return;
     }
 
-    if (formData.userType === 'dependent' && !formData.guardianPhone) {
-      toast.error('กรุณากรอกเบอร์โทรพนักงานผู้ดูแล');
+    if (formData.userType === 'dependent' && !formData.guardianEmployeeId) {
+      toast.error('กรุณากรอกรหัสพนักงานผู้ดูแล');
       setIsLoading(false);
       return;
     }
@@ -55,11 +68,11 @@ const Register = () => {
       // Simulate registration process
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      toast.success('ลงทะเบียนสำเร็จ! กำลังเข้าสู่ระบบ...');
+      toast.success('ลงทะเบียนสำเร็จ! กำลังไปยังหน้าเลือกประเภทการใช้งาน...');
       
-      // Redirect to dashboard after successful registration
+      // Redirect to service selection after successful registration
       setTimeout(() => {
-        navigate('/dashboard');
+        navigate('/service-selection');
       }, 1000);
       
     } catch (error) {
@@ -68,6 +81,9 @@ const Register = () => {
       setIsLoading(false);
     }
   };
+
+  // Determine if restroom preference should be shown
+  const showRestroomChoice = formData.gender === 'unspecified';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -153,11 +169,11 @@ const Register = () => {
                 >
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="male" id="male" />
-                    <Label htmlFor="male">ชาย</Label>
+                    <Label htmlFor="male">ชาย (ใช้ห้องน้ำชาย)</Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="female" id="female" />
-                    <Label htmlFor="female">หญิง</Label>
+                    <Label htmlFor="female">หญิง (ใช้ห้องน้ำหญิง)</Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="unspecified" id="unspecified" />
@@ -166,24 +182,26 @@ const Register = () => {
                 </RadioGroup>
               </div>
 
-              {/* Restroom Preference */}
-              <div>
-                <Label className="text-base font-medium">ห้องน้ำที่ต้องการใช้</Label>
-                <RadioGroup
-                  value={formData.restroomPref}
-                  onValueChange={(value) => handleInputChange('restroomPref', value)}
-                  className="mt-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="male" id="restroom-male" />
-                    <Label htmlFor="restroom-male">ห้องชาย</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="female" id="restroom-female" />
-                    <Label htmlFor="restroom-female">ห้องหญิง</Label>
-                  </div>
-                </RadioGroup>
-              </div>
+              {/* Restroom Preference - Only show for unspecified gender */}
+              {showRestroomChoice && (
+                <div>
+                  <Label className="text-base font-medium">ห้องน้ำที่ต้องการใช้</Label>
+                  <RadioGroup
+                    value={formData.restroomPref}
+                    onValueChange={(value) => handleInputChange('restroomPref', value)}
+                    className="mt-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="male" id="restroom-male" />
+                      <Label htmlFor="restroom-male">ห้องชาย</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="female" id="restroom-female" />
+                      <Label htmlFor="restroom-female">ห้องหญิง</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+              )}
 
               {/* User Type */}
               <div>
@@ -227,13 +245,12 @@ const Register = () => {
 
               {formData.userType === 'dependent' && (
                 <div>
-                  <Label htmlFor="guardianPhone">เบอร์โทรพนักงานผู้ดูแล *</Label>
+                  <Label htmlFor="guardianEmployeeId">รหัสพนักงานผู้ดูแล *</Label>
                   <Input
-                    id="guardianPhone"
-                    type="tel"
-                    value={formData.guardianPhone}
-                    onChange={(e) => handleInputChange('guardianPhone', e.target.value)}
-                    placeholder="0xx-xxx-xxxx"
+                    id="guardianEmployeeId"
+                    value={formData.guardianEmployeeId}
+                    onChange={(e) => handleInputChange('guardianEmployeeId', e.target.value)}
+                    placeholder="EMP12345"
                     required
                   />
                   <p className="text-xs text-amber-600 mt-1">

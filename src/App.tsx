@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ServiceSelection from "./pages/ServiceSelection";
 import Dashboard from "./pages/Dashboard";
 import UploadSlip from "./pages/UploadSlip";
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/service-selection" element={<ServiceSelection />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/upload-slip" element={<UploadSlip />} />
           <Route path="/payment-success" element={<PaymentSuccess />} />
