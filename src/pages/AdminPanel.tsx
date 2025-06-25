@@ -31,46 +31,25 @@ const AdminPanel = () => {
     }
   };
 
-  const handleStartService = async (queueId: string, lockerNumber: string) => {
+  const handleStartService = async (queueId: string) => {
     try {
       await updateQueueMutation.mutateAsync({
         queueId,
-        status: 'processing',
-        lockerNumber
+        status: 'processing'
       });
       
-      // อัปเดตสถานะ locker
-      await supabase
-        .from('lockers')
-        .update({ 
-          status: 'occupied',
-          current_queue_id: queueId
-        })
-        .eq('locker_number', lockerNumber);
-        
       toast.success('เริ่มบริการสำเร็จ');
     } catch (error) {
       toast.error('เกิดข้อผิดพลาด');
     }
   };
 
-  const handleCompleteService = async (queueId: string, lockerNumber?: string) => {
+  const handleCompleteService = async (queueId: string) => {
     try {
       await updateQueueMutation.mutateAsync({
         queueId,
         status: 'completed'
       });
-      
-      // คืนสถานะ locker
-      if (lockerNumber) {
-        await supabase
-          .from('lockers')
-          .update({ 
-            status: 'available',
-            current_queue_id: null
-          })
-          .eq('locker_number', lockerNumber);
-      }
       
       toast.success('บริการเสร็จสิ้น');
     } catch (error) {
@@ -197,39 +176,20 @@ const AdminPanel = () => {
                         )}
                         
                         {queue.status === 'called' && (
-                          <div className="flex space-x-2">
-                            <select
-                              value={selectedQueue === queue.id ? selectedQueue : ''}
-                              onChange={(e) => setSelectedQueue(e.target.value)}
-                              className="px-2 py-1 border rounded text-sm"
-                            >
-                              <option value="">เลือกตู้</option>
-                              {availableLockers.map(locker => (
-                                <option key={locker.id} value={locker.locker_number}>
-                                  {locker.locker_number} ({locker.location})
-                                </option>
-                              ))}
-                            </select>
-                            <Button 
-                              size="sm"
-                              onClick={() => {
-                                if (selectedQueue) {
-                                  handleStartService(queue.id, selectedQueue);
-                                  setSelectedQueue(null);
-                                }
-                              }}
-                              disabled={!selectedQueue || updateQueueMutation.isPending}
-                            >
-                              เริ่มบริการ
-                            </Button>
-                          </div>
+                          <Button 
+                            size="sm"
+                            onClick={() => handleStartService(queue.id)}
+                            disabled={updateQueueMutation.isPending}
+                          >
+                            เริ่มบริการ
+                          </Button>
                         )}
                         
                         {queue.status === 'processing' && (
                           <Button 
                             size="sm"
                             variant="outline"
-                            onClick={() => handleCompleteService(queue.id, queue.locker_number)}
+                            onClick={() => handleCompleteService(queue.id)}
                             disabled={updateQueueMutation.isPending}
                           >
                             บริการเสร็จ
