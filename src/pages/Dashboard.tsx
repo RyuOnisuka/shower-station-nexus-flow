@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { Clock, User, MapPin, Phone } from 'lucide-react';
+import { Clock, User, MapPin, Phone, Calendar, Upload, History, Settings } from 'lucide-react';
 import { useQueues, useCreateQueue } from '@/hooks/useDatabase';
 
 const Dashboard = () => {
@@ -47,14 +47,6 @@ const Dashboard = () => {
     } catch (error) {
       toast.error('เกิดข้อผิดพลาดในการสร้างคิว');
     }
-  };
-
-  const handleUploadSlip = () => {
-    navigate('/upload-slip');
-  };
-
-  const handleHistory = () => {
-    navigate('/history');
   };
 
   if (isLoading) {
@@ -124,96 +116,69 @@ const Dashboard = () => {
           </Card>
         )}
 
-        {/* Queue Form */}
-        {showCreateQueue && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">สมัครเข้าใช้บริการ</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  placeholder="ชื่อ"
-                  value={userForm.first_name}
-                  onChange={(e) => setUserForm(prev => ({ ...prev, first_name: e.target.value }))}
-                  className="px-3 py-2 border rounded"
-                />
-                <input
-                  type="text"
-                  placeholder="นามสกุล"
-                  value={userForm.last_name}
-                  onChange={(e) => setUserForm(prev => ({ ...prev, last_name: e.target.value }))}
-                  className="px-3 py-2 border rounded"
-                />
+        {/* Rich Menu - Updated to match LINE OA requirements */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg text-center">📱 Rich Menu</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Left Column */}
+              <div className="space-y-3">
+                {/* สมัครสมาชิก/เข้าใช้บริการ */}
+                <Card className="cursor-pointer hover:shadow-md transition-shadow bg-blue-50 border-blue-200">
+                  <CardContent 
+                    className="p-3 text-center" 
+                    onClick={() => navigate('/service-selection')}
+                  >
+                    <div className="text-2xl mb-1">👤</div>
+                    <h3 className="font-semibold text-xs">สมัครสมาชิก/</h3>
+                    <h3 className="font-semibold text-xs">เข้าใช้บริการ</h3>
+                  </CardContent>
+                </Card>
+
+                {/* แจ้งโอน/อัปโหลดสลิป */}
+                <Card className="cursor-pointer hover:shadow-md transition-shadow bg-green-50 border-green-200">
+                  <CardContent 
+                    className="p-3 text-center" 
+                    onClick={() => navigate('/upload-slip')}
+                  >
+                    <Upload className="h-6 w-6 mx-auto mb-1 text-green-600" />
+                    <h3 className="font-semibold text-xs">แจ้งโอน/</h3>
+                    <h3 className="font-semibold text-xs">อัปโหลดสลิป</h3>
+                  </CardContent>
+                </Card>
               </div>
-              <input
-                type="tel"
-                placeholder="เบอร์โทรศัพท์"
-                value={userForm.phone_number}
-                onChange={(e) => setUserForm(prev => ({ ...prev, phone_number: e.target.value }))}
-                className="w-full px-3 py-2 border rounded"
-              />
-              <div className="flex space-x-2">
-                <Button
-                  onClick={handleCreateQueue}
-                  disabled={createQueueMutation.isPending}
-                  className="flex-1"
-                >
-                  {createQueueMutation.isPending ? 'กำลังสร้าง...' : 'สร้างคิว'}
-                </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowCreateQueue(false)}
-                  className="flex-1"
-                >
-                  ยกเลิก
-                </Button>
+
+              {/* Right Column */}
+              <div className="space-y-3">
+                {/* ประวัติการใช้บริการ */}
+                <Card className="cursor-pointer hover:shadow-md transition-shadow bg-purple-50 border-purple-200">
+                  <CardContent 
+                    className="p-3 text-center" 
+                    onClick={() => navigate('/history')}
+                  >
+                    <History className="h-6 w-6 mx-auto mb-1 text-purple-600" />
+                    <h3 className="font-semibold text-xs">ประวัติการ</h3>
+                    <h3 className="font-semibold text-xs">ใช้บริการ</h3>
+                  </CardContent>
+                </Card>
+
+                {/* จัดการระบบ (Admin) */}
+                <Card className="cursor-pointer hover:shadow-md transition-shadow bg-orange-50 border-orange-200">
+                  <CardContent 
+                    className="p-3 text-center"
+                    onClick={() => navigate('/admin')}
+                  >
+                    <Settings className="h-6 w-6 mx-auto mb-1 text-orange-600" />
+                    <h3 className="font-semibold text-xs">จัดการระบบ</h3>
+                    <h3 className="font-semibold text-xs">(Admin)</h3>
+                  </CardContent>
+                </Card>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Main Menu */}
-        <div className="grid grid-cols-2 gap-4">
-          <Card className="cursor-pointer hover:shadow-md transition-shadow">
-            <CardContent 
-              className="p-4 text-center" 
-              onClick={() => setShowCreateQueue(true)}
-            >
-              <div className="text-3xl mb-2">🚶‍♂️</div>
-              <h3 className="font-semibold text-sm">สมัคร / เข้าใช้บริการ</h3>
-              <p className="text-xs text-gray-600 mt-1">Walk-in Service</p>
-            </CardContent>
-          </Card>
-
-          <Card className="cursor-pointer hover:shadow-md transition-shadow">
-            <CardContent className="p-4 text-center" onClick={handleUploadSlip}>
-              <div className="text-3xl mb-2">📜</div>
-              <h3 className="font-semibold text-sm">แจ้งโอน/อัปโหลดสลิป</h3>
-              <p className="text-xs text-gray-600 mt-1">Upload Payment</p>
-            </CardContent>
-          </Card>
-
-          <Card className="cursor-pointer hover:shadow-md transition-shadow">
-            <CardContent className="p-4 text-center" onClick={handleHistory}>
-              <div className="text-3xl mb-2">📋</div>
-              <h3 className="font-semibold text-sm">ประวัติการใช้บริการ</h3>
-              <p className="text-xs text-gray-600 mt-1">History</p>
-            </CardContent>
-          </Card>
-
-          <Card className="cursor-pointer hover:shadow-md transition-shadow">
-            <CardContent 
-              className="p-4 text-center"
-              onClick={() => navigate('/admin')}
-            >
-              <div className="text-3xl mb-2">⚙️</div>
-              <h3 className="font-semibold text-sm">Admin Panel</h3>
-              <p className="text-xs text-gray-600 mt-1">จัดการระบบ</p>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Queue Summary */}
         <Card>
@@ -260,7 +225,7 @@ const Dashboard = () => {
             </div>
             <div className="flex items-center space-x-2">
               <Clock className="h-4 w-4 text-blue-500" />
-              <span className="text-sm">เปิดบริการ 06:00 - 22:00 น.</span>
+              <span className="text-sm">เปิดบริการ 07:00 - 21:00 น.</span>
             </div>
           </CardContent>
         </Card>

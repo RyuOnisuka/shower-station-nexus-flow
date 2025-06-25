@@ -1,3 +1,4 @@
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -70,7 +71,7 @@ export const useDailyStats = () => {
   });
 };
 
-// Function to generate queue number - Updated to handle duplicates better
+// Function to generate queue number - Updated to better handle duplicates
 const generateQueueNumber = async (gender: string, serviceType: string): Promise<string> => {
   const genderCode = gender === 'male' ? 'M' : 'F';
   const serviceCode = serviceType === 'walkin' ? 'W' : 'B';
@@ -78,30 +79,32 @@ const generateQueueNumber = async (gender: string, serviceType: string): Promise
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
   
-  // Get count of today's queues with same gender and service type
+  // Use a more robust query to get today's queues
   const { data: todayQueues, error } = await supabase
     .from('queues')
     .select('queue_number')
     .gte('created_at', `${today}T00:00:00.000Z`)
-    .lt('created_at', `${today}T23:59:59.999Z`)
-    .ilike('queue_number', `${genderCode}${serviceCode}-%`)
-    .order('queue_number', { ascending: false });
+    .lt('created_at', `${new Date().toISOString()}`)
+    .order('created_at', { ascending: false });
   
   if (error) {
     console.error('Error fetching today queues:', error);
-    // Fallback to timestamp-based number if query fails
-    const timestamp = Date.now().toString().slice(-3);
+    // Use timestamp as fallback
+    const timestamp = Date.now().toString().slice(-4);
     return `${genderCode}${serviceCode}-${timestamp}`;
   }
   
-  // Find the highest existing number for today
+  // Find the highest existing number for today with same gender and service
   let highestNumber = 0;
   if (todayQueues && todayQueues.length > 0) {
+    const pattern = new RegExp(`^${genderCode}${serviceCode}-(\\d+)$`);
     todayQueues.forEach(queue => {
-      const numberPart = queue.queue_number.split('-')[1];
-      const number = parseInt(numberPart, 10);
-      if (!isNaN(number) && number > highestNumber) {
-        highestNumber = number;
+      const match = queue.queue_number.match(pattern);
+      if (match) {
+        const number = parseInt(match[1], 10);
+        if (!isNaN(number) && number > highestNumber) {
+          highestNumber = number;
+        }
       }
     });
   }
@@ -121,7 +124,7 @@ const getPriceByUserType = (userType: string): number => {
   }
 };
 
-// Hook สำหรับสร้างคิวใหม่ - Updated with pricing and booking time
+// Hook สำหรับสร้างคิวใหม่ - Updated with better error handling
 export const useCreateQueue = () => {
   const queryClient = useQueryClient();
   
