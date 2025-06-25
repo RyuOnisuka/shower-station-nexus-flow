@@ -1,4 +1,3 @@
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -71,7 +70,7 @@ export const useDailyStats = () => {
   });
 };
 
-// Function to generate queue number
+// Function to generate queue number - Updated to handle duplicates better
 const generateQueueNumber = async (gender: string, serviceType: string): Promise<string> => {
   const genderCode = gender === 'male' ? 'M' : 'F';
   const serviceCode = serviceType === 'walkin' ? 'W' : 'B';
@@ -85,22 +84,44 @@ const generateQueueNumber = async (gender: string, serviceType: string): Promise
     .select('queue_number')
     .gte('created_at', `${today}T00:00:00.000Z`)
     .lt('created_at', `${today}T23:59:59.999Z`)
-    .ilike('queue_number', `${genderCode}${serviceCode}-%`);
+    .ilike('queue_number', `${genderCode}${serviceCode}-%`)
+    .order('queue_number', { ascending: false });
   
   if (error) {
     console.error('Error fetching today queues:', error);
-    // Fallback to random number if query fails
-    const queueNum = String(Math.floor(Math.random() * 999) + 1).padStart(3, '0');
-    return `${genderCode}${serviceCode}-${queueNum}`;
+    // Fallback to timestamp-based number if query fails
+    const timestamp = Date.now().toString().slice(-3);
+    return `${genderCode}${serviceCode}-${timestamp}`;
   }
   
-  const nextNumber = (todayQueues?.length || 0) + 1;
+  // Find the highest existing number for today
+  let highestNumber = 0;
+  if (todayQueues && todayQueues.length > 0) {
+    todayQueues.forEach(queue => {
+      const numberPart = queue.queue_number.split('-')[1];
+      const number = parseInt(numberPart, 10);
+      if (!isNaN(number) && number > highestNumber) {
+        highestNumber = number;
+      }
+    });
+  }
+  
+  const nextNumber = highestNumber + 1;
   const queueNum = String(nextNumber).padStart(3, '0');
   
   return `${genderCode}${serviceCode}-${queueNum}`;
 };
 
-// Hook สำหรับสร้างคิวใหม่ - Updated with new queue logic
+// Function to get price based on user type
+const getPriceByUserType = (userType: string): number => {
+  switch (userType) {
+    case 'employee': return 50;
+    case 'follower': return 70;
+    default: return 100; // general
+  }
+};
+
+// Hook สำหรับสร้างคิวใหม่ - Updated with pricing and booking time
 export const useCreateQueue = () => {
   const queryClient = useQueryClient();
   
@@ -112,6 +133,8 @@ export const useCreateQueue = () => {
       gender?: string;
       restroom_pref?: string;
       service_type?: string;
+      user_type?: string;
+      booking_time?: string;
     }) => {
       console.log('Creating queue with userData:', userData);
       
@@ -134,7 +157,8 @@ export const useCreateQueue = () => {
             first_name: userData.first_name,
             last_name: userData.last_name,
             gender: userData.gender || 'unspecified',
-            restroom_pref: userData.restroom_pref || 'male'
+            restroom_pref: userData.restroom_pref || 'male',
+            user_type: userData.user_type || 'general'
           })
           .select()
           .single();
@@ -150,23 +174,32 @@ export const useCreateQueue = () => {
       // สร้างหมายเลขคิวตามเพศและประเภทการใช้งาน
       const queueNumber = await generateQueueNumber(
         user.gender || 'unspecified', 
-        userData.service_type || 'shower'
+        userData.service_type || 'walkin'
       );
       
       console.log('Generated queue number:', queueNumber);
 
-      // สร้างคิว - ใช้ 'shower' เป็น default service_type เพื่อให้ตรงกับ database constraint
-      const finalServiceType = userData.service_type === 'walkin' ? 'shower' : 
-                              userData.service_type === 'booking' ? 'shower' : 'shower';
+      // Calculate price based on user type
+      const price = getPriceByUserType(user.user_type || 'general');
+
+      // สร้างคิว
+      const queueData: any = {
+        queue_number: queueNumber,
+        user_id: user.id,
+        service_type: 'shower', // Always use 'shower' for database constraint
+        price: price
+      };
+
+      // Add booking time if provided
+      if (userData.booking_time && userData.service_type === 'booking') {
+        // Convert booking time to full datetime for today
+        const today = new Date().toISOString().split('T')[0];
+        queueData.booking_time = `${today}T${userData.booking_time}:00`;
+      }
 
       const { data: queue, error: queueError } = await supabase
         .from('queues')
-        .insert({
-          queue_number: queueNumber,
-          user_id: user.id,
-          service_type: finalServiceType,
-          price: 50.00
-        })
+        .insert(queueData)
         .select()
         .single();
 
