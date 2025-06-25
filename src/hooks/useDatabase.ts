@@ -72,11 +72,31 @@ export const useDailyStats = () => {
 };
 
 // Function to generate queue number
-const generateQueueNumber = (gender: string, serviceType: string): string => {
+const generateQueueNumber = async (gender: string, serviceType: string): Promise<string> => {
   const genderCode = gender === 'male' ? 'M' : 'F';
-  const serviceCode = serviceType === 'walk-in' ? 'W' : 'B';
-  // In real implementation, this should get the next number from database
-  const queueNum = String(Math.floor(Math.random() * 999) + 1).padStart(3, '0');
+  const serviceCode = serviceType === 'walkin' ? 'W' : 'B';
+  
+  // Get today's date in YYYY-MM-DD format
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Get count of today's queues with same gender and service type
+  const { data: todayQueues, error } = await supabase
+    .from('queues')
+    .select('queue_number')
+    .gte('created_at', `${today}T00:00:00.000Z`)
+    .lt('created_at', `${today}T23:59:59.999Z`)
+    .ilike('queue_number', `${genderCode}${serviceCode}-%`);
+  
+  if (error) {
+    console.error('Error fetching today queues:', error);
+    // Fallback to random number if query fails
+    const queueNum = String(Math.floor(Math.random() * 999) + 1).padStart(3, '0');
+    return `${genderCode}${serviceCode}-${queueNum}`;
+  }
+  
+  const nextNumber = (todayQueues?.length || 0) + 1;
+  const queueNum = String(nextNumber).padStart(3, '0');
+  
   return `${genderCode}${serviceCode}-${queueNum}`;
 };
 
@@ -93,6 +113,8 @@ export const useCreateQueue = () => {
       restroom_pref?: string;
       service_type?: string;
     }) => {
+      console.log('Creating queue with userData:', userData);
+      
       // สร้างหรือหาผู้ใช้
       let user;
       const { data: existingUser } = await supabase
@@ -103,6 +125,7 @@ export const useCreateQueue = () => {
 
       if (existingUser) {
         user = existingUser;
+        console.log('Found existing user:', user);
       } else {
         const { data: newUser, error: userError } = await supabase
           .from('users')
@@ -116,29 +139,43 @@ export const useCreateQueue = () => {
           .select()
           .single();
         
-        if (userError) throw userError;
+        if (userError) {
+          console.error('User creation error:', userError);
+          throw userError;
+        }
         user = newUser;
+        console.log('Created new user:', user);
       }
 
       // สร้างหมายเลขคิวตามเพศและประเภทการใช้งาน
-      const queueNumber = generateQueueNumber(
+      const queueNumber = await generateQueueNumber(
         user.gender || 'unspecified', 
-        userData.service_type || 'walk-in'
+        userData.service_type || 'shower'
       );
+      
+      console.log('Generated queue number:', queueNumber);
 
-      // สร้างคิว
+      // สร้างคิว - ใช้ 'shower' เป็น default service_type เพื่อให้ตรงกับ database constraint
+      const finalServiceType = userData.service_type === 'walkin' ? 'shower' : 
+                              userData.service_type === 'booking' ? 'shower' : 'shower';
+
       const { data: queue, error: queueError } = await supabase
         .from('queues')
         .insert({
           queue_number: queueNumber,
           user_id: user.id,
-          service_type: userData.service_type || 'walk-in',
+          service_type: finalServiceType,
           price: 50.00
         })
         .select()
         .single();
 
-      if (queueError) throw queueError;
+      if (queueError) {
+        console.error('Queue creation error:', queueError);
+        throw queueError;
+      }
+      
+      console.log('Created queue:', queue);
       return queue;
     },
     onSuccess: () => {

@@ -21,20 +21,18 @@ const ServiceSelection = () => {
     restroom_pref: 'male'
   };
 
-  const handleServiceSelection = async (serviceType: 'walk-in' | 'booking') => {
+  const handleServiceSelection = async (serviceType: 'walkin' | 'booking') => {
     setIsLoading(true);
     
     try {
-      // Generate queue number based on gender and service type
-      const genderCode = mockUser.gender === 'male' ? 'M' : 'F';
-      const serviceCode = serviceType === 'walk-in' ? 'W' : 'B';
+      console.log('Creating queue with service type:', serviceType);
       
       await createQueue.mutateAsync({
         ...mockUser,
         service_type: serviceType
       });
 
-      toast.success(`สร้างคิวสำเร็จ! ประเภท: ${serviceType === 'walk-in' ? 'Walk-in' : 'Booking'}`);
+      toast.success(`สร้างคิวสำเร็จ! ประเภท: ${serviceType === 'walkin' ? 'Walk-in' : 'Booking'}`);
       navigate('/dashboard');
       
     } catch (error) {
@@ -96,7 +94,7 @@ const ServiceSelection = () => {
                 <li>• ราคา 50 บาท</li>
               </ul>
               <Button
-                onClick={() => handleServiceSelection('walk-in')}
+                onClick={() => handleServiceSelection('walkin')}
                 disabled={isLoading}
                 className="w-full bg-blue-600 hover:bg-blue-700"
               >
