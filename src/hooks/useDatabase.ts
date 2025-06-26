@@ -1,4 +1,3 @@
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -71,48 +70,76 @@ export const useDailyStats = () => {
   });
 };
 
-// Function to generate queue number - Updated to better handle duplicates
-const generateQueueNumber = async (gender: string, serviceType: string): Promise<string> => {
-  const genderCode = gender === 'male' ? 'M' : 'F';
-  const serviceCode = serviceType === 'walkin' ? 'W' : 'B';
+// Function to generate queue number - Enhanced error handling and retry logic
+const generateQueueNumber = async (gender: string, serviceType: string, retryCount = 0): Promise<string> => {
+  const maxRetries = 5;
   
-  // Get today's date in YYYY-MM-DD format
-  const today = new Date().toISOString().split('T')[0];
-  
-  // Use a more robust query to get today's queues
-  const { data: todayQueues, error } = await supabase
-    .from('queues')
-    .select('queue_number')
-    .gte('created_at', `${today}T00:00:00.000Z`)
-    .lt('created_at', `${new Date().toISOString()}`)
-    .order('created_at', { ascending: false });
-  
-  if (error) {
-    console.error('Error fetching today queues:', error);
-    // Use timestamp as fallback
-    const timestamp = Date.now().toString().slice(-4);
-    return `${genderCode}${serviceCode}-${timestamp}`;
-  }
-  
-  // Find the highest existing number for today with same gender and service
-  let highestNumber = 0;
-  if (todayQueues && todayQueues.length > 0) {
-    const pattern = new RegExp(`^${genderCode}${serviceCode}-(\\d+)$`);
-    todayQueues.forEach(queue => {
-      const match = queue.queue_number.match(pattern);
-      if (match) {
-        const number = parseInt(match[1], 10);
-        if (!isNaN(number) && number > highestNumber) {
-          highestNumber = number;
+  try {
+    const genderCode = gender === 'male' ? 'M' : 'F';
+    const serviceCode = serviceType === 'walkin' ? 'W' : 'B';
+    
+    // Get today's date in YYYY-MM-DD format (Thailand timezone)
+    const today = new Date().toLocaleDateString('sv-SE'); // ISO format YYYY-MM-DD
+    
+    console.log('Generating queue number for:', { gender, serviceType, today, genderCode, serviceCode });
+    
+    // Get today's queues with better date filtering
+    const startOfDay = `${today}T00:00:00.000Z`;
+    const endOfDay = `${today}T23:59:59.999Z`;
+    
+    const { data: todayQueues, error } = await supabase
+      .from('queues')
+      .select('queue_number')
+      .gte('created_at', startOfDay)
+      .lte('created_at', endOfDay)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching today queues:', error);
+      // Fallback: use timestamp-based number
+      const timestamp = Date.now().toString().slice(-4);
+      const randomSuffix = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+      return `${genderCode}${serviceCode}-${timestamp}${randomSuffix}`;
+    }
+    
+    console.log('Today queues found:', todayQueues?.length || 0);
+    
+    // Find the highest existing number for today with same gender and service
+    let highestNumber = 0;
+    if (todayQueues && todayQueues.length > 0) {
+      const pattern = new RegExp(`^${genderCode}${serviceCode}-(\\d+)$`);
+      todayQueues.forEach(queue => {
+        const match = queue.queue_number.match(pattern);
+        if (match) {
+          const number = parseInt(match[1], 10);
+          if (!isNaN(number) && number > highestNumber) {
+            highestNumber = number;
+          }
         }
-      }
-    });
+      });
+    }
+    
+    const nextNumber = highestNumber + 1;
+    const queueNum = String(nextNumber).padStart(3, '0');
+    const generatedNumber = `${genderCode}${serviceCode}-${queueNum}`;
+    
+    console.log('Generated queue number:', generatedNumber);
+    return generatedNumber;
+    
+  } catch (error) {
+    console.error('Error in generateQueueNumber:', error);
+    
+    if (retryCount < maxRetries) {
+      console.log(`Retrying queue number generation (attempt ${retryCount + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // Exponential backoff
+      return generateQueueNumber(gender, serviceType, retryCount + 1);
+    }
+    
+    // Final fallback
+    const timestamp = Date.now().toString().slice(-6);
+    const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `${gender === 'male' ? 'M' : 'F'}${serviceType === 'walkin' ? 'W' : 'B'}-${timestamp}${randomSuffix}`;
   }
-  
-  const nextNumber = highestNumber + 1;
-  const queueNum = String(nextNumber).padStart(3, '0');
-  
-  return `${genderCode}${serviceCode}-${queueNum}`;
 };
 
 // Function to get price based on user type
@@ -124,7 +151,7 @@ const getPriceByUserType = (userType: string): number => {
   }
 };
 
-// Hook สำหรับสร้างคิวใหม่ - Updated with better error handling
+// Hook สำหรับสร้างคิวใหม่ - Enhanced with better error handling and booking support
 export const useCreateQueue = () => {
   const queryClient = useQueryClient();
   
@@ -141,87 +168,111 @@ export const useCreateQueue = () => {
     }) => {
       console.log('Creating queue with userData:', userData);
       
-      // สร้างหรือหาผู้ใช้
-      let user;
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('*')
-        .eq('phone_number', userData.phone_number)
-        .single();
-
-      if (existingUser) {
-        user = existingUser;
-        console.log('Found existing user:', user);
-      } else {
-        const { data: newUser, error: userError } = await supabase
+      try {
+        // Validate required fields
+        if (!userData.phone_number || !userData.first_name || !userData.last_name) {
+          throw new Error('Missing required user information');
+        }
+        
+        // สร้างหรือหาผู้ใช้
+        let user;
+        const { data: existingUser, error: fetchError } = await supabase
           .from('users')
-          .insert({
-            phone_number: userData.phone_number,
-            first_name: userData.first_name,
-            last_name: userData.last_name,
-            gender: userData.gender || 'unspecified',
-            restroom_pref: userData.restroom_pref || 'male',
-            user_type: userData.user_type || 'general'
-          })
+          .select('*')
+          .eq('phone_number', userData.phone_number)
+          .maybeSingle();
+
+        if (fetchError) {
+          console.error('Error fetching user:', fetchError);
+          throw new Error('Failed to check existing user');
+        }
+
+        if (existingUser) {
+          user = existingUser;
+          console.log('Found existing user:', user);
+        } else {
+          console.log('Creating new user...');
+          const { data: newUser, error: userError } = await supabase
+            .from('users')
+            .insert({
+              phone_number: userData.phone_number,
+              first_name: userData.first_name,
+              last_name: userData.last_name,
+              gender: userData.gender || 'unspecified',
+              restroom_pref: userData.restroom_pref || 'male',
+              user_type: userData.user_type || 'general'
+            })
+            .select()
+            .single();
+          
+          if (userError) {
+            console.error('User creation error:', userError);
+            throw new Error(`Failed to create user: ${userError.message}`);
+          }
+          user = newUser;
+          console.log('Created new user:', user);
+        }
+
+        // Generate queue number based on user's gender and service type
+        const queueNumber = await generateQueueNumber(
+          user.gender || 'unspecified', 
+          userData.service_type || 'walkin'
+        );
+        
+        console.log('Generated queue number:', queueNumber);
+
+        // Calculate price based on user type
+        const price = getPriceByUserType(user.user_type || 'general');
+
+        // Prepare queue data
+        const queueData: any = {
+          queue_number: queueNumber,
+          user_id: user.id,
+          service_type: 'shower', // Always use 'shower' for database constraint
+          price: price
+        };
+
+        // Add booking time if provided
+        if (userData.booking_time && userData.service_type === 'booking') {
+          // Convert booking time to full datetime for today
+          const today = new Date().toISOString().split('T')[0];
+          queueData.booking_time = `${today}T${userData.booking_time}:00`;
+          console.log('Added booking time:', queueData.booking_time);
+        }
+
+        console.log('Creating queue with data:', queueData);
+
+        // สร้างคิว
+        const { data: queue, error: queueError } = await supabase
+          .from('queues')
+          .insert(queueData)
           .select()
           .single();
-        
-        if (userError) {
-          console.error('User creation error:', userError);
-          throw userError;
+
+        if (queueError) {
+          console.error('Queue creation error:', queueError);
+          throw new Error(`Failed to create queue: ${queueError.message}`);
         }
-        user = newUser;
-        console.log('Created new user:', user);
+        
+        console.log('Created queue successfully:', queue);
+        return queue;
+        
+      } catch (error) {
+        console.error('Error in useCreateQueue mutation:', error);
+        throw error;
       }
-
-      // สร้างหมายเลขคิวตามเพศและประเภทการใช้งาน
-      const queueNumber = await generateQueueNumber(
-        user.gender || 'unspecified', 
-        userData.service_type || 'walkin'
-      );
-      
-      console.log('Generated queue number:', queueNumber);
-
-      // Calculate price based on user type
-      const price = getPriceByUserType(user.user_type || 'general');
-
-      // สร้างคิว
-      const queueData: any = {
-        queue_number: queueNumber,
-        user_id: user.id,
-        service_type: 'shower', // Always use 'shower' for database constraint
-        price: price
-      };
-
-      // Add booking time if provided
-      if (userData.booking_time && userData.service_type === 'booking') {
-        // Convert booking time to full datetime for today
-        const today = new Date().toISOString().split('T')[0];
-        queueData.booking_time = `${today}T${userData.booking_time}:00`;
-      }
-
-      const { data: queue, error: queueError } = await supabase
-        .from('queues')
-        .insert(queueData)
-        .select()
-        .single();
-
-      if (queueError) {
-        console.error('Queue creation error:', queueError);
-        throw queueError;
-      }
-      
-      console.log('Created queue:', queue);
-      return queue;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['queues'] });
       queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (error) => {
+      console.error('Queue creation failed:', error);
     }
   });
 };
 
-// Hook สำหรับอัปเดตสถานะคิว - Updated with auto locker assignment
+// Hook สำหรับอัปเดตสถานะคิว - Enhanced with gender-based locker assignment
 export const useUpdateQueueStatus = () => {
   const queryClient = useQueryClient();
   
@@ -237,23 +288,41 @@ export const useUpdateQueueStatus = () => {
       } else if (status === 'processing') {
         updateData.started_at = new Date().toISOString();
         
-        // Auto-assign available locker based on user's restroom preference
-        const { data: queue } = await supabase
+        // Auto-assign available locker based on user's gender and restroom preference
+        const { data: queueWithUser } = await supabase
           .from('queues')
-          .select('user:users(restroom_pref)')
+          .select(`
+            *,
+            user:users(gender, restroom_pref)
+          `)
           .eq('id', queueId)
           .single();
 
-        if (queue?.user?.restroom_pref) {
-          const location = queue.user.restroom_pref === 'male' 
-            ? 'Floor 1 - Male Section'
-            : 'Floor 1 - Female Section';
+        if (queueWithUser?.user) {
+          const userGender = queueWithUser.user.gender;
+          const restroomPref = queueWithUser.user.restroom_pref;
+          
+          // Determine section based on gender first, then restroom preference
+          let section = '';
+          if (userGender === 'male') {
+            section = 'Male';
+          } else if (userGender === 'female') {
+            section = 'Female';
+          } else if (restroomPref === 'male') {
+            section = 'Male';
+          } else if (restroomPref === 'female') {
+            section = 'Female';
+          } else {
+            section = 'Male'; // Default fallback
+          }
+          
+          console.log(`Assigning locker for user with gender: ${userGender}, restroom_pref: ${restroomPref}, section: ${section}`);
           
           const { data: availableLocker } = await supabase
             .from('lockers')
             .select('*')
             .eq('status', 'available')
-            .ilike('location', `%${queue.user.restroom_pref === 'male' ? 'Male' : 'Female'}%`)
+            .ilike('location', `%${section}%`)
             .limit(1)
             .single();
 
@@ -268,6 +337,10 @@ export const useUpdateQueueStatus = () => {
                 current_queue_id: queueId 
               })
               .eq('id', availableLocker.id);
+              
+            console.log(`Assigned locker ${availableLocker.locker_number} to queue ${queueId}`);
+          } else {
+            console.log(`No available lockers in ${section} section`);
           }
         }
       } else if (status === 'completed') {

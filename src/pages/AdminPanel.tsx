@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -59,7 +58,8 @@ const AdminPanel = () => {
 
   const handleApprovePayment = async (queueId: string) => {
     try {
-      const { error } = await supabase
+      // Update payment status
+      const { error: paymentError } = await supabase
         .from('payments')
         .update({ 
           status: 'approved',
@@ -68,11 +68,18 @@ const AdminPanel = () => {
         })
         .eq('queue_id', queueId);
         
-      if (error) throw error;
+      if (paymentError) throw paymentError;
+      
+      // Auto-start service after payment approval
+      await updateQueueMutation.mutateAsync({
+        queueId,
+        status: 'processing'
+      });
       
       await refetchQueues();
-      toast.success('อนุมัติการชำระเงินสำเร็จ');
+      toast.success('อนุมัติการชำระเงินและเริ่มบริการสำเร็จ');
     } catch (error) {
+      console.error('Payment approval error:', error);
       toast.error('เกิดข้อผิดพลาด');
     }
   };
@@ -157,6 +164,14 @@ const AdminPanel = () => {
                           {queue.locker_number && (
                             <Badge variant="outline">ตู้: {queue.locker_number}</Badge>
                           )}
+                          {queue.booking_time && (
+                            <Badge variant="secondary">
+                              จอง: {new Date(queue.booking_time).toLocaleTimeString('th-TH', { 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                              })}
+                            </Badge>
+                          )}
                         </div>
                         <div className="text-sm text-gray-600 mt-1">
                           เวลา: {new Date(queue.created_at).toLocaleTimeString('th-TH')} | 
@@ -225,6 +240,14 @@ const AdminPanel = () => {
                           <span className="font-bold">{queue.queue_number}</span>
                           <span>{queue.user?.first_name} {queue.user?.last_name}</span>
                           <Badge variant="outline">฿{queue.price}</Badge>
+                          {queue.booking_time && (
+                            <Badge variant="secondary">
+                              จอง: {new Date(queue.booking_time).toLocaleTimeString('th-TH', { 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                              })}
+                            </Badge>
+                          )}
                         </div>
                         <div className="text-sm text-gray-600 mt-1">
                           เวลาส่งสลิป: {new Date(queue.payment[0]?.created_at).toLocaleString('th-TH')}
@@ -235,8 +258,9 @@ const AdminPanel = () => {
                         <Button 
                           size="sm"
                           onClick={() => handleApprovePayment(queue.id)}
+                          disabled={updateQueueMutation.isPending}
                         >
-                          อนุมัติ
+                          อนุมัติและเริ่มบริการ
                         </Button>
                         <Button size="sm" variant="outline">
                           ปฏิเสธ
@@ -244,6 +268,14 @@ const AdminPanel = () => {
                       </div>
                     </div>
                   )) || []}
+                  
+                  {(!queues?.filter(q => 
+                    q.payment && q.payment.some((p: any) => p.status === 'pending')
+                  ).length) && (
+                    <div className="text-center py-8 text-gray-500">
+                      ไม่มีการชำระเงินที่รอตรวจสอบ
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
