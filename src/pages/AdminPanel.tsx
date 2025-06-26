@@ -1,16 +1,24 @@
-
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
-import { useQueues, useLockers, useUpdateQueueStatus, useDailyStats } from '@/hooks/useDatabase';
+import { 
+  useQueues, 
+  useLockers, 
+  useUpdateQueueStatus, 
+  useDailyStats, 
+  usePendingUsers,
+  useApproveUser,
+  useRejectUser
+} from '@/hooks/useDatabase';
 import { supabase } from '@/integrations/supabase/client';
 import { QueueManagementTab } from '@/components/admin/QueueManagementTab';
 import { PaymentManagementTab } from '@/components/admin/PaymentManagementTab';
 import { LockerManagementTab } from '@/components/admin/LockerManagementTab';
 import { StatisticsTab } from '@/components/admin/StatisticsTab';
+import { UserApprovalTab } from '@/components/admin/UserApprovalTab';
 
 const AdminPanel = () => {
   const navigate = useNavigate();
@@ -18,7 +26,10 @@ const AdminPanel = () => {
   const { data: queues, isLoading: queuesLoading, refetch: refetchQueues } = useQueues();
   const { data: lockers, isLoading: lockersLoading } = useLockers();
   const { data: dailyStats } = useDailyStats();
+  const { data: pendingUsers, isLoading: pendingUsersLoading } = usePendingUsers();
   const updateQueueMutation = useUpdateQueueStatus();
+  const approveUserMutation = useApproveUser();
+  const rejectUserMutation = useRejectUser();
 
   const handleCallQueue = async (queueId: string) => {
     try {
@@ -86,6 +97,24 @@ const AdminPanel = () => {
     }
   };
 
+  const handleApproveUser = async (userId: string) => {
+    try {
+      await approveUserMutation.mutateAsync(userId);
+      toast.success('อนุมัติสมาชิกสำเร็จ');
+    } catch (error) {
+      toast.error('เกิดข้อผิดพลาด');
+    }
+  };
+
+  const handleRejectUser = async (userId: string) => {
+    try {
+      await rejectUserMutation.mutateAsync(userId);
+      toast.success('ปฏิเสธสมาชิกสำเร็จ');
+    } catch (error) {
+      toast.error('เกิดข้อผิดพลาด');
+    }
+  };
+
   const activeQueues = queues?.filter(q => 
     ['waiting', 'called', 'processing'].includes(q.status)
   ) || [];
@@ -94,7 +123,7 @@ const AdminPanel = () => {
     q.payment && q.payment.some((p: any) => p.status === 'pending')
   ) || [];
 
-  if (queuesLoading || lockersLoading) {
+  if (queuesLoading || lockersLoading || pendingUsersLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -120,9 +149,10 @@ const AdminPanel = () => {
         </div>
 
         <Tabs defaultValue="queues" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="queues">จัดการคิว</TabsTrigger>
             <TabsTrigger value="payments">การชำระเงิน</TabsTrigger>
+            <TabsTrigger value="users">อนุมัติสมาชิก</TabsTrigger>
             <TabsTrigger value="lockers">ตู้ล็อกเกอร์</TabsTrigger>
             <TabsTrigger value="stats">สถิติ</TabsTrigger>
           </TabsList>
@@ -142,6 +172,15 @@ const AdminPanel = () => {
               pendingPaymentQueues={pendingPaymentQueues}
               onApprovePayment={handleApprovePayment}
               isLoading={updateQueueMutation.isPending}
+            />
+          </TabsContent>
+
+          <TabsContent value="users">
+            <UserApprovalTab
+              pendingUsers={pendingUsers || []}
+              onApproveUser={handleApproveUser}
+              onRejectUser={handleRejectUser}
+              isLoading={approveUserMutation.isPending || rejectUserMutation.isPending}
             />
           </TabsContent>
 
