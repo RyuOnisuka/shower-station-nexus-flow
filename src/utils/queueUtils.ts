@@ -9,21 +9,22 @@ export const generateQueueNumber = async (gender: string, serviceType: string, r
     const genderCode = gender === 'male' ? 'M' : 'F';
     const serviceCode = serviceType === 'walkin' ? 'W' : 'B';
     
-    // Get today's date in YYYY-MM-DD format (Thailand timezone)
-    const today = new Date().toLocaleDateString('sv-SE'); // ISO format YYYY-MM-DD
+    // Get today's date in Thailand timezone (UTC+7)
+    const now = new Date();
+    const thailandOffset = 7 * 60; // Thailand is UTC+7
+    const thailandTime = new Date(now.getTime() + (thailandOffset * 60000));
+    const today = thailandTime.toISOString().split('T')[0]; // YYYY-MM-DD format
     
     console.log('Generating queue number for:', { gender, serviceType, today, genderCode, serviceCode });
     
-    // Get today's queues with better date filtering
-    const startOfDay = `${today}T00:00:00.000Z`;
-    const endOfDay = `${today}T23:59:59.999Z`;
-    
+    // Query today's queues using date comparison instead of timestamp
     const { data: todayQueues, error } = await supabase
       .from('queues')
       .select('queue_number')
-      .gte('created_at', startOfDay)
-      .lte('created_at', endOfDay)
-      .order('created_at', { ascending: false });
+      .gte('created_at', `${today}T00:00:00+00:00`)
+      .lt('created_at', `${today}T23:59:59+00:00`)
+      .like('queue_number', `${genderCode}${serviceCode}-%`)
+      .order('queue_number', { ascending: false });
     
     if (error) {
       console.error('Error fetching today queues:', error);
@@ -33,7 +34,7 @@ export const generateQueueNumber = async (gender: string, serviceType: string, r
       return `${genderCode}${serviceCode}-${timestamp}${randomSuffix}`;
     }
     
-    console.log('Today queues found:', todayQueues?.length || 0);
+    console.log('Today queues found:', todayQueues?.length || 0, todayQueues);
     
     // Find the highest existing number for today with same gender and service
     let highestNumber = 0;
@@ -54,7 +55,26 @@ export const generateQueueNumber = async (gender: string, serviceType: string, r
     const queueNum = String(nextNumber).padStart(3, '0');
     const generatedNumber = `${genderCode}${serviceCode}-${queueNum}`;
     
-    console.log('Generated queue number:', generatedNumber);
+    console.log('Generated queue number:', generatedNumber, 'from highest:', highestNumber);
+    
+    // Double check if the generated number already exists
+    const { data: existingQueue, error: checkError } = await supabase
+      .from('queues')
+      .select('id')
+      .eq('queue_number', generatedNumber)
+      .maybeSingle();
+    
+    if (checkError) {
+      console.error('Error checking existing queue:', checkError);
+    }
+    
+    if (existingQueue) {
+      console.log('Generated number already exists, retrying...');
+      if (retryCount < maxRetries) {
+        return generateQueueNumber(gender, serviceType, retryCount + 1);
+      }
+    }
+    
     return generatedNumber;
     
   } catch (error) {
@@ -66,7 +86,7 @@ export const generateQueueNumber = async (gender: string, serviceType: string, r
       return generateQueueNumber(gender, serviceType, retryCount + 1);
     }
     
-    // Final fallback
+    // Final fallback with timestamp to ensure uniqueness
     const timestamp = Date.now().toString().slice(-6);
     const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     return `${gender === 'male' ? 'M' : 'F'}${serviceType === 'walkin' ? 'W' : 'B'}-${timestamp}${randomSuffix}`;
