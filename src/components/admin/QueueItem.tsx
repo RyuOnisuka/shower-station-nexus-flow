@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, User, Phone, Droplets, Toilet } from 'lucide-react';
+import { Clock, User, Phone, Calendar, MapPin } from 'lucide-react';
 import { QueueTimeTracker } from '@/components/QueueTimeTracker';
 import { getQueueDisplayName } from '@/utils/queueUtils';
 import type { Database } from '@/integrations/supabase/types';
@@ -45,57 +45,68 @@ export const QueueItem = ({
     }
   };
 
-  const getServiceIcon = (serviceType: string) => {
-    switch (serviceType) {
-      case 'shower': return <Droplets className="h-4 w-4 text-blue-600" />;
-      case 'toilet': return <Toilet className="h-4 w-4 text-green-600" />;
-      default: return <Droplets className="h-4 w-4 text-blue-600" />;
-    }
+  const getBookingType = () => {
+    return queue.booking_time ? 'จองล่วงหน้า' : 'Walk-in';
   };
 
-  const getServiceText = (serviceType: string) => {
-    switch (serviceType) {
-      case 'shower': return 'อาบน้ำ';
-      case 'toilet': return 'ห้องน้ำ';
-      default: return 'อาบน้ำ';
-    }
+  const getBookingTypeColor = () => {
+    return queue.booking_time ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
+  };
+
+  const getGenderText = (queueNumber: string) => {
+    if (queueNumber.startsWith('M')) return 'ชาย';
+    if (queueNumber.startsWith('W')) return 'หญิง';
+    return 'รวม';
+  };
+
+  const getGenderColor = (queueNumber: string) => {
+    if (queueNumber.startsWith('M')) return 'bg-blue-100 text-blue-800';
+    if (queueNumber.startsWith('W')) return 'bg-pink-100 text-pink-800';
+    return 'bg-gray-100 text-gray-800';
   };
 
   return (
     <Card className="mb-4">
       <CardContent className="p-4">
         <div className="flex justify-between items-start mb-3">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
               <h3 className="text-lg font-semibold text-blue-600">
                 {queue.queue_number}
               </h3>
-              {getServiceIcon(queue.service_type)}
+              <Badge className={getGenderColor(queue.queue_number)}>
+                {getGenderText(queue.queue_number)}
+              </Badge>
+              <Badge className={getBookingTypeColor()}>
+                {getBookingType()}
+              </Badge>
             </div>
-            <div className="text-sm text-gray-600 mb-1">
-              {getQueueDisplayName(queue.queue_number)}
-            </div>
-            <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
+            
+            <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
               <User className="h-4 w-4" />
               {queue.user?.first_name} {queue.user?.last_name}
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-600">
+            
+            <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
               <Phone className="h-4 w-4" />
               {queue.user?.phone_number}
             </div>
+
+            {queue.locker_number && (
+              <div className="flex items-center gap-2 text-sm text-green-600 mb-2">
+                <MapPin className="h-4 w-4" />
+                ตู้ล็อกเกอร์: {queue.locker_number}
+              </div>
+            )}
           </div>
+          
           <div className="flex flex-col gap-2 items-end">
             <Badge className={getStatusColor(queue.status)}>
               {getStatusText(queue.status)}
             </Badge>
             <Badge variant="outline" className="text-xs">
-              {getServiceText(queue.service_type)}
+              ฿{queue.price}
             </Badge>
-            {queue.locker_number && (
-              <Badge variant="outline">
-                ตู้: {queue.locker_number}
-              </Badge>
-            )}
             <QueueTimeTracker 
               startedAt={queue.started_at} 
               status={queue.status} 
@@ -109,6 +120,7 @@ export const QueueItem = ({
           {queue.booking_time && (
             <>
               <span className="mx-2">•</span>
+              <Calendar className="h-4 w-4" />
               จองเวลา: {new Date(queue.booking_time).toLocaleTimeString('th-TH', { 
                 hour: '2-digit', 
                 minute: '2-digit' 

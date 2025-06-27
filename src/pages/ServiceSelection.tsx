@@ -1,245 +1,226 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { toast } from 'sonner';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Droplets, Toilet, Users } from 'lucide-react';
-import { useCreateQueue } from '@/hooks/useDatabase';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { ArrowLeft, Clock, Calendar, Users } from 'lucide-react';
+import { useQueues } from '@/hooks/useDatabase';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+type BookingType = 'walkin' | 'booking';
 
 const ServiceSelection = () => {
-  const [selectedService, setSelectedService] = useState<'shower' | 'toilet' | null>(null);
-  const [selectedTime, setSelectedTime] = useState<string>('');
-  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
-  const [isBooking, setIsBooking] = useState(false);
   const navigate = useNavigate();
-  const createQueueMutation = useCreateQueue();
+  const [selectedBookingType, setSelectedBookingType] = useState<BookingType | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const { data: queues } = useQueues();
 
-  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-  
-  useEffect(() => {
-    if (!userData.phone_number || !userData.first_name || !userData.last_name) {
-      toast.error('ข้อมูลผู้ใช้ไม่ครบถ้วน กรุณาลงทะเบียนใหม่');
-      navigate('/register');
+  const bookingTypes = [
+    {
+      id: 'walkin',
+      name: 'Walk-in',
+      description: 'มาใช้บริการทันที',
+      icon: <Clock className="h-6 w-6" />,
+      color: 'bg-blue-500'
+    },
+    {
+      id: 'booking',
+      name: 'จองล่วงหน้า',
+      description: 'จองเวลาใช้บริการล่วงหน้า',
+      icon: <Calendar className="h-6 w-6" />,
+      color: 'bg-green-500'
+    }
+  ];
+
+  const getCurrentQueueCount = (bookingType: BookingType) => {
+    return queues?.filter(q => 
+      (bookingType === 'walkin' ? !q.booking_time : q.booking_time) &&
+      ['waiting', 'called', 'processing'].includes(q.status)
+    ).length || 0;
+  };
+
+  const generateQueueNumber = (bookingType: BookingType, gender: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    const existingQueues = queues?.filter(q => 
+      (bookingType === 'walkin' ? !q.booking_time : q.booking_time) &&
+      q.created_at?.startsWith(today)
+    ) || [];
+
+    const nextNumber = existingQueues.length + 1;
+    const formattedNumber = nextNumber.toString().padStart(3, '0');
+    
+    const genderPrefix = gender === 'male' ? 'M' : gender === 'female' ? 'W' : 'U';
+    const bookingPrefix = bookingType === 'walkin' ? 'W' : 'B';
+    
+    return `${genderPrefix}${bookingPrefix}-${formattedNumber}`;
+  };
+
+  const handleServiceSelect = async () => {
+    if (!selectedBookingType) {
+      toast.error('กรุณาเลือกประเภทการจอง');
       return;
     }
 
-    if (isBooking) {
-      const generateAvailableTimes = () => {
-        const now = new Date();
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
-        const times: string[] = [];
-        
-        const startHour = 7;
-        const endHour = 21;
-        
-        for (let hour = startHour; hour < endHour; hour++) {
-          for (let minute = 0; minute < 60; minute += 30) {
-            if (hour > currentHour || (hour === currentHour && minute > currentMinute)) {
-              const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-              times.push(timeString);
-            }
-          }
-        }
-        
-        return times;
-      };
-      
-      setAvailableTimes(generateAvailableTimes());
-    }
-  }, [isBooking, userData, navigate]);
-
-  const getPriceByUserType = (userType: string): number => {
-    switch (userType) {
-      case 'employee': return 50;
-      case 'dependent': return 70;
-      default: return 100;
-    }
-  };
-
-  const getUserTypeDisplay = (userType: string): string => {
-    switch (userType) {
-      case 'employee': return 'พนักงาน';
-      case 'dependent': return 'ผู้ติดตาม';
-      default: return 'ทั่วไป';
-    }
-  };
-
-  const handleServiceSelect = (service: 'shower' | 'toilet') => {
-    setSelectedService(service);
-    setSelectedTime('');
-  };
-
-  const handleConfirm = async () => {
-    if (!selectedService) {
-      toast.error('กรุณาเลือกประเภทบริการ');
-      return;
-    }
-
-    if (isBooking && !selectedTime) {
-      toast.error('กรุณาเลือกเวลาที่ต้องการจอง');
-      return;
-    }
-
+    setIsLoading(true);
     try {
-      console.log('Creating queue with data:', {
-        phone_number: userData.phone_number,
-        first_name: userData.first_name,
-        last_name: userData.last_name,
-        gender: userData.gender || 'male',
-        restroom_pref: userData.restroom_pref || 'male',
-        service_type: selectedService,
-        user_type: userData.user_type || 'general',
-        booking_time: isBooking ? selectedTime : undefined
+      // Get user info
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('กรุณาเข้าสู่ระบบ');
+        navigate('/login');
+        return;
+      }
+
+      // Get user profile
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (!userProfile) {
+        toast.error('ไม่พบข้อมูลผู้ใช้');
+        return;
+      }
+
+      // Determine gender for queue number
+      let gender = 'unisex';
+      if (userProfile.gender) {
+        gender = userProfile.gender;
+      }
+
+      const queueNumber = generateQueueNumber(selectedBookingType, gender);
+      const price = 50; // Default price for all services
+
+      // Create queue
+      const { data: queue, error } = await supabase
+        .from('queues')
+        .insert({
+          user_id: user.id,
+          queue_number: queueNumber,
+          service_type: 'general', // General service type
+          price: price,
+          status: 'waiting',
+          booking_time: selectedBookingType === 'booking' ? new Date().toISOString() : null
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating queue:', error);
+        toast.error('เกิดข้อผิดพลาดในการสร้างคิว');
+        return;
+      }
+
+      toast.success(`สร้างคิวสำเร็จ: ${queueNumber}`);
+      navigate('/upload-slip', { 
+        state: { 
+          queueId: queue.id,
+          queueNumber: queueNumber,
+          price: price
+        } 
       });
 
-      const queue = await createQueueMutation.mutateAsync({
-        phone_number: userData.phone_number,
-        first_name: userData.first_name,
-        last_name: userData.last_name,
-        gender: userData.gender || 'male',
-        restroom_pref: userData.restroom_pref || 'male',
-        service_type: selectedService,
-        user_type: userData.user_type || 'general',
-        booking_time: isBooking ? selectedTime : undefined
-      });
-
-      console.log('Queue created successfully:', queue);
-      
-      // Store queue data for dashboard display
-      localStorage.setItem('currentQueue', JSON.stringify({
-        ...queue,
-        serviceType: selectedService,
-        bookingTime: selectedTime
-      }));
-      
-      toast.success('สร้างคิวสำเร็จ!');
-      navigate('/dashboard');
     } catch (error) {
-      console.error('Queue creation error:', error);
-      toast.error('เกิดข้อผิดพลาดในการสร้างคิว: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      console.error('Error:', error);
+      toast.error('เกิดข้อผิดพลาด');
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  const price = getPriceByUserType(userData.user_type || 'general');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-md mx-auto space-y-6">
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Header */}
         <div className="flex items-center space-x-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="text-xl font-bold text-gray-800">เลือกประเภทบริการ</h1>
+          <h1 className="text-2xl font-bold">เลือกบริการ</h1>
         </div>
 
-        <Card className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
-          <CardContent className="p-6 text-center">
-            <div className="mb-4">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Users className="h-8 w-8 text-blue-600" />
-              </div>
-              <h2 className="text-lg font-semibold text-gray-800">
-                สวัสดี คุณ{userData.first_name} {userData.last_name}
-              </h2>
-              <p className="text-sm text-gray-600 mt-1">
-                ประเภทสมาชิก: {getUserTypeDisplay(userData.user_type)}
-              </p>
-            </div>
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-              ราคา ฿{price}
-            </Badge>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
+        {/* Current Queue Status */}
+        <Card>
           <CardHeader>
-            <CardTitle className="text-center text-gray-800">เลือกประเภทบริการ</CardTitle>
+            <CardTitle className="flex items-center space-x-2">
+              <Users className="h-5 w-5" />
+              <span>สถานะคิวปัจจุบัน</span>
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <RadioGroup 
-              value={selectedService || ''} 
-              onValueChange={(value) => handleServiceSelect(value as 'shower' | 'toilet')}
-              className="space-y-3"
-            >
-              <div className="flex items-center space-x-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-300 transition-colors">
-                <RadioGroupItem value="shower" id="shower" />
-                <Label htmlFor="shower" className="flex-1 cursor-pointer">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                      <Droplets className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-800">อาบน้ำ</div>
-                      <div className="text-sm text-gray-600">บริการอาบน้ำ</div>
-                    </div>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <Clock className="h-6 w-6 text-blue-600" />
+                  <div>
+                    <div className="font-semibold">Walk-in</div>
+                    <div className="text-sm text-gray-600">มาใช้บริการทันที</div>
                   </div>
-                </Label>
+                </div>
+                <Badge variant="secondary" className="text-lg font-bold">
+                  {getCurrentQueueCount('walkin')} คน
+                </Badge>
               </div>
-
-              <div className="flex items-center space-x-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-300 transition-colors">
-                <RadioGroupItem value="toilet" id="toilet" />
-                <Label htmlFor="toilet" className="flex-1 cursor-pointer">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                      <Toilet className="h-5 w-5 text-green-600" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-800">ห้องน้ำ</div>
-                      <div className="text-sm text-gray-600">บริการห้องน้ำ</div>
-                    </div>
+              
+              <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <Calendar className="h-6 w-6 text-green-600" />
+                  <div>
+                    <div className="font-semibold">จองล่วงหน้า</div>
+                    <div className="text-sm text-gray-600">จองเวลาใช้บริการ</div>
                   </div>
-                </Label>
-              </div>
-            </RadioGroup>
-
-            {/* Booking Option */}
-            <div className="pt-4 border-t">
-              <div className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  id="booking"
-                  checked={isBooking}
-                  onChange={(e) => setIsBooking(e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <Label htmlFor="booking" className="text-sm text-gray-700">
-                  จองเวลาล่วงหน้า (ไม่บังคับ)
-                </Label>
+                </div>
+                <Badge variant="secondary" className="text-lg font-bold">
+                  {getCurrentQueueCount('booking')} คน
+                </Badge>
               </div>
             </div>
-
-            {isBooking && (
-              <div className="space-y-2">
-                <Label htmlFor="booking-time">เลือกเวลา</Label>
-                <Select value={selectedTime} onValueChange={setSelectedTime}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="เลือกเวลาที่ต้องการ" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableTimes.map((time) => (
-                      <SelectItem key={time} value={time}>
-                        {time}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <Button 
-              onClick={handleConfirm}
-              className="w-full bg-blue-600 hover:bg-blue-700"
-              disabled={createQueueMutation.isPending}
-            >
-              {createQueueMutation.isPending ? 'กำลังสร้างคิว...' : 'สร้างคิว'}
-            </Button>
           </CardContent>
         </Card>
+
+        {/* Booking Type Selection */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold">เลือกประเภทการจอง</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {bookingTypes.map((type) => (
+              <Card
+                key={type.id}
+                className={`cursor-pointer transition-all hover:shadow-md ${
+                  selectedBookingType === type.id ? 'ring-2 ring-blue-500' : ''
+                }`}
+                onClick={() => setSelectedBookingType(type.id as BookingType)}
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-lg ${type.color} text-white`}>
+                      {type.icon}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">{type.name}</h3>
+                      <p className="text-sm text-gray-600">{type.description}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+
+        {/* Continue Button */}
+        {selectedBookingType && (
+          <div className="flex justify-center pt-6">
+            <Button 
+              onClick={handleServiceSelect}
+              disabled={isLoading}
+              size="lg"
+              className="w-full max-w-md"
+            >
+              {isLoading ? 'กำลังสร้างคิว...' : 'ดำเนินการต่อ'}
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
-
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ExternalLink, Eye } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
 type Queue = Database['public']['Tables']['queues']['Row'] & {
@@ -15,6 +15,14 @@ interface PaymentItemProps {
 }
 
 export const PaymentItem = ({ queue, onApprovePayment, isLoading }: PaymentItemProps) => {
+  const slipUrl = queue.payment?.[0]?.slip_url;
+
+  const handleViewSlip = () => {
+    if (slipUrl) {
+      window.open(slipUrl, '_blank');
+    }
+  };
+
   return (
     <div className="flex items-center justify-between p-4 border rounded-lg">
       <div className="flex-1">
@@ -34,6 +42,20 @@ export const PaymentItem = ({ queue, onApprovePayment, isLoading }: PaymentItemP
         <div className="text-sm text-gray-600 mt-1">
           เวลาส่งสลิป: {new Date(queue.payment?.[0]?.created_at || '').toLocaleString('th-TH')}
         </div>
+        {slipUrl && (
+          <div className="text-sm text-blue-600 mt-1">
+            <Button 
+              variant="link" 
+              size="sm" 
+              className="p-0 h-auto text-blue-600 hover:text-blue-800"
+              onClick={handleViewSlip}
+            >
+              <Eye className="h-3 w-3 mr-1" />
+              ดูสลิปการโอนเงิน
+              <ExternalLink className="h-3 w-3 ml-1" />
+            </Button>
+          </div>
+        )}
       </div>
       
       <div className="flex space-x-2">

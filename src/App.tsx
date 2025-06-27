@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useEffect } from "react";
-import { checkAndPerformDailyReset } from "@/utils/dailyReset";
+import { checkAndPerformDailyReset, setupAutoReset } from "@/utils/dailyReset";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -22,6 +22,8 @@ const App = () => {
   useEffect(() => {
     // ตรวจสอบและทำ daily reset เมื่อแอปเริ่มต้น
     checkAndPerformDailyReset().catch(console.error);
+    // Setup auto reset scheduler
+    setupAutoReset();
   }, []);
 
   return (

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, RotateCcw } from 'lucide-react';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { 
   useQueues, 
   useLockers, 
@@ -14,7 +14,6 @@ import {
   useRejectUser
 } from '@/hooks/useDatabase';
 import { supabase } from '@/integrations/supabase/client';
-import { manualDailyReset } from '@/utils/dailyReset';
 import { QueueManagementTab } from '@/components/admin/QueueManagementTab';
 import { PaymentManagementTab } from '@/components/admin/PaymentManagementTab';
 import { LockerManagementTab } from '@/components/admin/LockerManagementTab';
@@ -23,7 +22,6 @@ import { UserApprovalTab } from '@/components/admin/UserApprovalTab';
 
 const AdminPanel = () => {
   const navigate = useNavigate();
-  const [isResetting, setIsResetting] = useState(false);
   
   const { data: queues, isLoading: queuesLoading, refetch: refetchQueues } = useQueues();
   const { data: lockers, isLoading: lockersLoading } = useLockers();
@@ -32,6 +30,18 @@ const AdminPanel = () => {
   const updateQueueMutation = useUpdateQueueStatus();
   const approveUserMutation = useApproveUser();
   const rejectUserMutation = useRejectUser();
+
+  // Get lockers with user and queue data
+  const enhancedLockers = lockers?.map(locker => {
+    const relatedQueue = queues?.find(q => q.id === locker.current_queue_id);
+    const relatedUser = relatedQueue?.user;
+    
+    return {
+      ...locker,
+      user: relatedUser,
+      queue: relatedQueue
+    };
+  }) || [];
 
   const handleCallQueue = async (queueId: string) => {
     try {
@@ -85,14 +95,71 @@ const AdminPanel = () => {
         
       if (paymentError) throw paymentError;
       
-      // Auto-start service after payment approval
-      await updateQueueMutation.mutateAsync({
-        queueId,
-        status: 'processing'
-      });
+      // Get queue and user info for locker assignment
+      const { data: queue } = await supabase
+        .from('queues')
+        .select(`
+          *,
+          user:users(*)
+        `)
+        .eq('id', queueId)
+        .single();
+
+      if (!queue) throw new Error('Queue not found');
+
+      // Determine gender for locker assignment
+      let gender = 'unisex';
+      if (queue.user?.gender) {
+        gender = queue.user.gender;
+      } else if (queue.service_type === 'toilet') {
+        gender = queue.user?.restroom_pref || 'unisex';
+      }
+
+      // Generate locker number based on gender
+      const genderPrefix = gender === 'male' ? 'M' : gender === 'female' ? 'W' : 'U';
+      const servicePrefix = queue.service_type === 'shower' ? 'S' : 'T';
+      
+      // Find available locker with gender prefix
+      const { data: availableLockers } = await supabase
+        .from('lockers')
+        .select('*')
+        .eq('status', 'available')
+        .like('locker_number', `${genderPrefix}${servicePrefix}%`)
+        .order('locker_number');
+
+      if (!availableLockers || availableLockers.length === 0) {
+        toast.error('ไม่มีตู้ล็อกเกอร์ว่างสำหรับบริการนี้');
+        return;
+      }
+
+      const selectedLocker = availableLockers[0];
+
+      // Assign locker to queue
+      const { error: lockerError } = await supabase
+        .from('lockers')
+        .update({
+          status: 'occupied',
+          user_id: queue.user_id,
+          queue_id: queueId,
+          occupied_at: new Date().toISOString()
+        })
+        .eq('id', selectedLocker.id);
+
+      if (lockerError) throw lockerError;
+
+      // Update queue with locker number
+      const { error: queueError } = await supabase
+        .from('queues')
+        .update({
+          locker_number: selectedLocker.locker_number,
+          status: 'processing'
+        })
+        .eq('id', queueId);
+
+      if (queueError) throw queueError;
       
       await refetchQueues();
-      toast.success('อนุมัติการชำระเงินและเริ่มบริการสำเร็จ');
+      toast.success(`อนุมัติการชำระเงินและมอบหมายตู้ล็อกเกอร์ ${selectedLocker.locker_number} สำเร็จ`);
     } catch (error) {
       console.error('Payment approval error:', error);
       toast.error('เกิดข้อผิดพลาด');
@@ -114,27 +181,6 @@ const AdminPanel = () => {
       toast.success('ปฏิเสธสมาชิกสำเร็จ');
     } catch (error) {
       toast.error('เกิดข้อผิดพลาด');
-    }
-  };
-
-  const handleDailyReset = async () => {
-    if (!confirm('คุณแน่ใจหรือไม่ที่จะทำ Daily Reset? การดำเนินการนี้จะลบคิวค้างทั้งหมดและรีเซ็ตระบบ')) {
-      return;
-    }
-    
-    setIsResetting(true);
-    try {
-      const result = await manualDailyReset();
-      if (result.success) {
-        toast.success(result.message);
-        await refetchQueues();
-      } else {
-        toast.error(result.message);
-      }
-    } catch (error) {
-      toast.error('เกิดข้อผิดพลาดในการทำ Daily Reset');
-    } finally {
-      setIsResetting(false);
     }
   };
 
@@ -165,21 +211,10 @@ const AdminPanel = () => {
             </Button>
             <h1 className="text-2xl font-bold">Admin Panel</h1>
           </div>
-          <div className="flex space-x-2">
-            <Button onClick={() => refetchQueues()} variant="outline" size="sm">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              รีเฟรช
-            </Button>
-            <Button 
-              onClick={handleDailyReset} 
-              variant="destructive" 
-              size="sm"
-              disabled={isResetting}
-            >
-              <RotateCcw className={`h-4 w-4 mr-2 ${isResetting ? 'animate-spin' : ''}`} />
-              {isResetting ? 'กำลังรีเซ็ต...' : 'Daily Reset'}
-            </Button>
-          </div>
+          <Button onClick={() => refetchQueues()} variant="outline" size="sm">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            รีเฟรช
+          </Button>
         </div>
 
         <Tabs defaultValue="queues" className="space-y-4">
@@ -219,7 +254,7 @@ const AdminPanel = () => {
           </TabsContent>
 
           <TabsContent value="lockers">
-            <LockerManagementTab lockers={lockers || []} />
+            <LockerManagementTab lockers={enhancedLockers} />
           </TabsContent>
 
           <TabsContent value="stats">
