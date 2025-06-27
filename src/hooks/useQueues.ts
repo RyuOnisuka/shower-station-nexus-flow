@@ -152,7 +152,7 @@ export const useCreateQueue = () => {
           lastError = error as Error;
           
           // If it's not a duplicate key error, don't retry
-          if (!(error as any)?.code === '23505' && !(error as Error)?.message?.includes('duplicate')) {
+          if ((error as any)?.code !== '23505' && !(error as Error)?.message?.includes('duplicate')) {
             throw error;
           }
           
