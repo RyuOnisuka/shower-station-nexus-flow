@@ -1,3 +1,4 @@
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { generateQueueNumber, getPriceByUserType } from '@/utils/queueUtils';
@@ -22,7 +23,7 @@ export const useQueues = () => {
   });
 };
 
-// Hook สำหรับสร้างคิวใหม่ - Enhanced with better error handling and booking support
+// Enhanced queue creation with better error handling and retry logic
 export const useCreateQueue = () => {
   const queryClient = useQueryClient();
   
@@ -44,94 +45,128 @@ export const useCreateQueue = () => {
         throw new Error('Missing required user information');
       }
       
-      try {
-        // สร้างหรือหาผู้ใช้
-        let user;
-        const { data: existingUser, error: fetchError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('phone_number', userData.phone_number)
-          .maybeSingle();
-
-        if (fetchError) {
-          console.error('Error fetching user:', fetchError);
-          throw new Error(`Failed to check existing user: ${fetchError.message}`);
-        }
-
-        if (existingUser) {
-          user = existingUser;
-          console.log('Found existing user:', user);
-        } else {
-          console.log('Creating new user...');
-          const { data: newUser, error: userError } = await supabase
+      // Retry logic for queue creation
+      const maxRetries = 3;
+      let lastError: Error | null = null;
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`Queue creation attempt ${attempt}/${maxRetries}`);
+          
+          // Find or create user
+          let user;
+          const { data: existingUser, error: fetchError } = await supabase
             .from('users')
-            .insert({
-              phone_number: userData.phone_number,
-              first_name: userData.first_name,
-              last_name: userData.last_name,
-              gender: userData.gender || 'unspecified',
-              restroom_pref: userData.restroom_pref || 'male',
-              user_type: userData.user_type || 'general'
-            })
+            .select('*')
+            .eq('phone_number', userData.phone_number)
+            .maybeSingle();
+
+          if (fetchError) {
+            console.error('Error fetching user:', fetchError);
+            throw new Error(`Failed to check existing user: ${fetchError.message}`);
+          }
+
+          if (existingUser) {
+            user = existingUser;
+            console.log('Found existing user:', user);
+          } else {
+            console.log('Creating new user...');
+            const { data: newUser, error: userError } = await supabase
+              .from('users')
+              .insert({
+                phone_number: userData.phone_number,
+                first_name: userData.first_name,
+                last_name: userData.last_name,
+                gender: userData.gender || 'unspecified',
+                restroom_pref: userData.restroom_pref || 'male',
+                user_type: userData.user_type || 'general'
+              })
+              .select()
+              .single();
+            
+            if (userError) {
+              console.error('User creation error:', userError);
+              throw new Error(`Failed to create user: ${userError.message}`);
+            }
+            user = newUser;
+            console.log('Created new user:', user);
+          }
+
+          // Generate queue number with retry built-in
+          const queueNumber = await generateQueueNumber(
+            user.gender || 'male', 
+            userData.service_type || 'walkin'
+          );
+          
+          console.log('Generated queue number:', queueNumber);
+
+          // Calculate price based on user type
+          const price = getPriceByUserType(user.user_type || 'general');
+
+          // Prepare queue data
+          const queueData: any = {
+            queue_number: queueNumber,
+            user_id: user.id,
+            service_type: 'shower', // Always use 'shower' for database constraint
+            price: price
+          };
+
+          // Add booking time if provided
+          if (userData.booking_time && userData.service_type === 'booking') {
+            const today = new Date().toISOString().split('T')[0];
+            queueData.booking_time = `${today}T${userData.booking_time}:00+07:00`;
+            console.log('Added booking time:', queueData.booking_time);
+          }
+
+          console.log('Creating queue with data:', queueData);
+
+          // Create queue with specific error handling
+          const { data: queue, error: queueError } = await supabase
+            .from('queues')
+            .insert(queueData)
             .select()
             .single();
-          
-          if (userError) {
-            console.error('User creation error:', userError);
-            throw new Error(`Failed to create user: ${userError.message}`);
+
+          if (queueError) {
+            console.error('Queue creation error:', queueError);
+            
+            // Handle specific error types
+            if (queueError.code === '23505') { // Unique constraint violation
+              console.log('Duplicate queue number detected, retrying...');
+              if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 200 * attempt)); // Progressive delay
+                continue; // Retry
+              } else {
+                throw new Error('Unable to generate unique queue number after multiple attempts');
+              }
+            } else {
+              throw new Error(`Failed to create queue: ${queueError.message}`);
+            }
           }
-          user = newUser;
-          console.log('Created new user:', user);
+          
+          console.log('Created queue successfully:', queue);
+          return queue;
+          
+        } catch (error) {
+          console.error(`Queue creation attempt ${attempt} failed:`, error);
+          lastError = error as Error;
+          
+          // If it's not a duplicate key error, don't retry
+          if (!(error as any)?.code === '23505' && !(error as Error)?.message?.includes('duplicate')) {
+            throw error;
+          }
+          
+          // If this was the last attempt, throw the error
+          if (attempt === maxRetries) {
+            throw lastError;
+          }
+          
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, 300 * attempt));
         }
-
-        // Generate queue number based on user's gender and service type
-        const queueNumber = await generateQueueNumber(
-          user.gender || 'male', 
-          userData.service_type || 'walkin'
-        );
-        
-        console.log('Generated queue number:', queueNumber);
-
-        // Calculate price based on user type
-        const price = getPriceByUserType(user.user_type || 'general');
-
-        // Prepare queue data
-        const queueData: any = {
-          queue_number: queueNumber,
-          user_id: user.id,
-          service_type: 'shower', // Always use 'shower' for database constraint
-          price: price
-        };
-
-        // Add booking time if provided
-        if (userData.booking_time && userData.service_type === 'booking') {
-          // Convert booking time to full datetime for today
-          const today = new Date().toISOString().split('T')[0];
-          queueData.booking_time = `${today}T${userData.booking_time}:00`;
-          console.log('Added booking time:', queueData.booking_time);
-        }
-
-        console.log('Creating queue with data:', queueData);
-
-        // สร้างคิว
-        const { data: queue, error: queueError } = await supabase
-          .from('queues')
-          .insert(queueData)
-          .select()
-          .single();
-
-        if (queueError) {
-          console.error('Queue creation error:', queueError);
-          throw new Error(`Failed to create queue: ${queueError.message}`);
-        }
-        
-        console.log('Created queue successfully:', queue);
-        return queue;
-        
-      } catch (error) {
-        console.error('Error in queue creation:', error);
-        throw error;
       }
+      
+      throw lastError || new Error('Queue creation failed after all retries');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['queues'] });
@@ -143,7 +178,7 @@ export const useCreateQueue = () => {
   });
 };
 
-// Hook สำหรับอัปเดตสถานะคิว - Enhanced with gender-based locker assignment
+// Hook สำหรับอัปเดตสถานะคิว - Enhanced with time tracking for 3-hour limit
 export const useUpdateQueueStatus = () => {
   const queryClient = useQueryClient();
   

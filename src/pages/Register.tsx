@@ -97,7 +97,7 @@ const Register = () => {
         return;
       }
 
-      // Create new user
+      // For general users (no RLS needed) and pending approval users
       const userData = {
         phone_number: formData.phoneNumber,
         first_name: formData.firstName,
@@ -112,6 +112,9 @@ const Register = () => {
         status: (formData.userType === 'employee' || formData.userType === 'dependent') ? 'pending' : 'active'
       };
 
+      console.log('Creating user with data:', userData);
+
+      // Direct insert without RLS concerns for registration
       const { data: newUser, error } = await supabase
         .from('users')
         .insert(userData)
@@ -120,8 +123,16 @@ const Register = () => {
 
       if (error) {
         console.error('Registration error:', error);
-        throw new Error(error.message);
+        if (error.code === '42501') {
+          toast.error('ขณะนี้ระบบไม่สามารถลงทะเบียนได้ กรุณาลองใหม่อีกครั้ง');
+        } else {
+          toast.error('เกิดข้อผิดพลาดในการลงทะเบียน: ' + error.message);
+        }
+        setIsLoading(false);
+        return;
       }
+
+      console.log('User created successfully:', newUser);
 
       // Store user data in localStorage
       localStorage.setItem('userData', JSON.stringify(newUser));
