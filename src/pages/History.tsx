@@ -1,5 +1,3 @@
-
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
@@ -29,34 +27,43 @@ const History = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'waiting': return 'bg-yellow-500';
-      case 'called': return 'bg-green-500';
-      case 'processing': return 'bg-blue-500';
-      case 'completed': return 'bg-gray-500';
-      case 'cancelled': return 'bg-red-500';
-      default: return 'bg-gray-500';
+      case 'waiting': return 'bg-yellow-400 text-white';
+      case 'called': return 'bg-[#BFA14A] text-white';
+      case 'processing': return 'bg-blue-400 text-white';
+      case 'completed': return 'bg-gray-400 text-white';
+      case 'cancelled': return 'bg-red-400 text-white';
+      default: return 'bg-gray-400 text-white';
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen bg-[#FAF6EF] p-4">
       <div className="max-w-md mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center space-x-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <h1 className="text-xl font-bold text-gray-800">ประวัติการใช้บริการ</h1>
+        <div className="flex items-center space-x-3 mb-2">
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            className="border-none bg-transparent"
+          >
+            <span className="inline-flex items-center justify-center rounded-full p-1 hover:bg-[#F3EAD6]">
+              <ArrowLeft className="h-5 w-5 text-[#BFA14A]" />
+            </span>
+          </button>
+          <div className="flex flex-col items-center">
+            <div className="text-2xl mb-1" style={{ color: '#BFA14A' }}>🚿</div>
+            <span className="text-lg font-bold" style={{ color: '#BFA14A' }}>SHOWER STATION</span>
+          </div>
         </div>
 
         {/* User Info */}
-        <Card className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
+        <Card className="bg-white rounded-xl shadow-md border-0">
           <CardContent className="p-4">
             <div className="text-center">
-              <h2 className="font-semibold text-gray-800">
+              <h2 className="font-semibold text-[#BFA14A]">
                 {userData.first_name} {userData.last_name}
               </h2>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-700">
                 เบอร์โทร: {userData.phone_number}
               </p>
             </div>
@@ -66,98 +73,87 @@ const History = () => {
         {/* History List */}
         <div className="space-y-4">
           {userQueues.length === 0 ? (
-            <Card className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
+            <Card className="bg-white rounded-xl shadow-md border-0">
               <CardContent className="p-6 text-center">
                 <div className="text-6xl mb-4">📋</div>
-                <h2 className="text-lg font-semibold text-gray-800 mb-2">ไม่มีประวัติการใช้บริการ</h2>
-                <p className="text-gray-600 mb-4">คุณยังไม่เคยใช้บริการในระบบนี้</p>
-                <Button 
+                <h2 className="text-lg font-semibold text-[#BFA14A] mb-2">ไม่มีประวัติการใช้งาน</h2>
+                <p className="text-gray-700 mb-4">คุณยังไม่เคยใช้บริการในระบบนี้</p>
+                <button 
                   onClick={() => navigate('/service-selection')}
-                  className="bg-blue-600 hover:bg-blue-700"
+                  className="w-full border border-[#BFA14A] text-[#BFA14A] rounded-md font-semibold py-2 hover:bg-[#BFA14A] hover:text-white transition"
                 >
                   สร้างคิวใหม่
-                </Button>
+                </button>
               </CardContent>
             </Card>
           ) : (
             <>
-              <h3 className="text-lg font-semibold text-gray-800">
+              <h3 className="text-lg font-semibold text-[#BFA14A]">
                 ประวัติทั้งหมด ({userQueues.length} รายการ)
               </h3>
-              
               {userQueues.map((queue) => (
-                <Card key={queue.id} className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
+                <Card key={queue.id} className="bg-white rounded-xl shadow-md border-0">
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-center">
-                      <CardTitle className="text-lg">
+                      <CardTitle className="text-lg text-[#BFA14A]">
                         คิว {queue.queue_number}
                       </CardTitle>
-                      <Badge className={`${getStatusColor(queue.status)} hover:${getStatusColor(queue.status)}`}>
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(queue.status)}`}>
                         {getStatusText(queue.status)}
-                      </Badge>
+                      </span>
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <div className="space-y-2 text-sm">
+                    <div className="space-y-2 text-sm text-gray-700">
                       <div className="flex justify-between">
-                        <span className="text-gray-600">วันที่:</span>
+                        <span>วันที่:</span>
                         <span>{new Date(queue.created_at).toLocaleDateString('th-TH')}</span>
                       </div>
-                      
                       <div className="flex justify-between">
-                        <span className="text-gray-600">เวลา:</span>
+                        <span>เวลา:</span>
                         <span>{new Date(queue.created_at).toLocaleTimeString('th-TH')}</span>
                       </div>
-
                       {queue.booking_time && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">เวลาจอง:</span>
+                          <span>เวลาจอง:</span>
                           <span className="flex items-center">
-                            <Clock className="h-4 w-4 mr-1" />
-                            {new Date(queue.booking_time).toLocaleTimeString('th-TH', { 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
-                            })} น.
+                            <Clock className="h-4 w-4 mr-1" style={{ color: '#BFA14A' }} />
+                            {new Date(queue.booking_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
                           </span>
                         </div>
                       )}
-
                       <div className="flex justify-between">
-                        <span className="text-gray-600">ราคา:</span>
-                        <span className="font-semibold">฿{queue.price}</span>
+                        <span>ราคา:</span>
+                        <span className="font-semibold text-[#BFA14A]">฿{queue.price}</span>
                       </div>
-
                       {queue.locker_number && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">ตู้ล็อกเกอร์:</span>
-                          <span className="flex items-center">
-                            <MapPin className="h-4 w-4 mr-1" />
+                          <span>ตู้ล็อกเกอร์:</span>
+                          <span className="flex items-center text-[#BFA14A]">
+                            <MapPin className="h-4 w-4 mr-1" style={{ color: '#BFA14A' }} />
                             {queue.locker_number}
                           </span>
                         </div>
                       )}
-
                       {queue.completed_at && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">เสร็จสิ้นเมื่อ:</span>
+                          <span>เสร็จสิ้นเมื่อ:</span>
                           <span>{new Date(queue.completed_at).toLocaleString('th-TH')}</span>
                         </div>
                       )}
-
-                      {/* Payment Status */}
                       {queue.payment && queue.payment.length > 0 && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">การชำระเงิน:</span>
-                          <Badge variant="outline" className={
+                          <span>การชำระเงิน:</span>
+                          <span className={
                             queue.payment[0].status === 'approved' 
-                              ? 'text-green-700 border-green-200' 
+                              ? 'text-green-700' 
                               : queue.payment[0].status === 'pending'
-                              ? 'text-yellow-700 border-yellow-200'
-                              : 'text-red-700 border-red-200'
+                              ? 'text-yellow-700'
+                              : 'text-red-700'
                           }>
                             {queue.payment[0].status === 'approved' ? 'อนุมัติแล้ว' : 
                              queue.payment[0].status === 'pending' ? 'รอตรวจสอบ' : 'ปฏิเสธ'}
-                          </Badge>
+                          </span>
                         </div>
                       )}
                     </div>
@@ -167,23 +163,19 @@ const History = () => {
             </>
           )}
         </div>
-
-        {/* Action Buttons */}
         <div className="space-y-2">
-          <Button 
+          <button 
             onClick={() => navigate('/service-selection')}
-            className="w-full bg-blue-600 hover:bg-blue-700"
+            className="w-full border border-[#BFA14A] text-[#BFA14A] rounded-md font-semibold py-2 hover:bg-[#BFA14A] hover:text-white transition"
           >
             สร้างคิวใหม่
-          </Button>
-          
-          <Button 
+          </button>
+          <button 
             onClick={() => navigate('/dashboard')}
-            variant="outline"
-            className="w-full"
+            className="w-full border border-[#BFA14A] text-[#BFA14A] rounded-md font-semibold py-2 hover:bg-[#BFA14A] hover:text-white transition"
           >
             กลับหน้าหลัก
-          </Button>
+          </button>
         </div>
       </div>
     </div>

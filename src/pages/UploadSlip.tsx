@@ -77,59 +77,56 @@ const UploadSlip = () => {
   // Show pending payment status
   if (pendingPaymentQueue) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4">
+      <div className="min-h-screen bg-[#FAF6EF] p-4">
         <div className="max-w-md mx-auto space-y-4">
-          <div className="flex items-center space-x-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h1 className="text-xl font-semibold">สถานะการชำระเงิน</h1>
+          <div className="flex items-center space-x-3 mb-2">
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="border-none bg-transparent"
+            >
+              <span className="inline-flex items-center justify-center rounded-full p-1 hover:bg-[#F3EAD6]">
+                <ArrowLeft className="h-5 w-5 text-[#BFA14A]" />
+              </span>
+            </button>
+            <div className="flex flex-col items-center">
+              <div className="text-2xl mb-1" style={{ color: '#BFA14A' }}>🚿</div>
+              <span className="text-lg font-bold" style={{ color: '#BFA14A' }}>SHOWER STATION</span>
+            </div>
           </div>
-          
-          <Card className="border-yellow-200 bg-yellow-50">
+          <Card className="border-[#BFA14A] bg-[#F3EAD6] rounded-xl shadow-md">
             <CardHeader>
-              <CardTitle className="text-lg text-yellow-700 flex items-center space-x-2">
-                <Clock className="h-5 w-5" />
-                <span>รอการตรวจสอบ</span>
+              <CardTitle className="text-lg text-[#BFA14A] flex items-center space-x-2">
+                <Clock className="h-5 w-5" style={{ color: '#BFA14A' }} />
+                <span>รอตรวจสอบ</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
+              <div className="space-y-2 text-gray-700">
                 <div className="flex justify-between items-center">
                   <span>หมายเลขคิว:</span>
-                  <Badge variant="outline" className="text-lg font-bold">
-                    {pendingPaymentQueue.queue_number}
-                  </Badge>
+                  <Badge variant="outline" className="text-lg font-bold border-[#BFA14A] text-[#BFA14A]">{pendingPaymentQueue.queue_number}</Badge>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>จำนวนเงิน:</span>
-                  <span className="font-semibold text-lg">฿{pendingPaymentQueue.price}</span>
+                  <span className="font-semibold text-lg text-[#BFA14A]">฿{pendingPaymentQueue.price}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>สถานะ:</span>
-                  <Badge className="bg-yellow-500 hover:bg-yellow-600">
-                    รอเจ้าหน้าที่ตรวจสอบ
-                  </Badge>
+                  <Badge className="bg-[#BFA14A] text-white">รอตรวจสอบ</Badge>
                 </div>
               </div>
-              
-              <div className="mt-4 p-3 bg-yellow-100 rounded-lg">
-                <p className="text-sm text-yellow-800">
-                  📄 สลิปการโอนเงินของคุณอยู่ในระหว่างการตรวจสอบ
-                  <br />
-                  ⏰ โดยทั่วไปใช้เวลา 2-3 นาที
-                  <br />
-                  ✅ หลังได้รับการอนุมัติจะได้รับหมายเลขตู้ล็อกเกอร์
+              <div className="mt-4 p-3 bg-[#FAF6EF] rounded-lg">
+                <p className="text-sm text-[#BFA14A]">
+                  🧾 สลิปการโอนของคุณอยู่ระหว่างการตรวจสอบ<br />⏰ โดยทั่วไปใช้เวลา 2-3 นาที<br />✅ หลังได้รับอนุมัติจะได้รับหมายเลขตู้ล็อกเกอร์
                 </p>
               </div>
-
-              <Button 
+              <button 
                 onClick={() => navigate('/dashboard')}
-                className="w-full mt-4"
-                variant="outline"
+                className="w-full mt-4 border border-[#BFA14A] text-[#BFA14A] rounded-md font-semibold py-2 hover:bg-[#BFA14A] hover:text-white transition"
               >
                 กลับหน้าหลัก
-              </Button>
+              </button>
             </CardContent>
           </Card>
         </div>
@@ -139,25 +136,31 @@ const UploadSlip = () => {
 
   if (!activeQueue) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4">
+      <div className="min-h-screen bg-[#FAF6EF] p-4">
         <div className="max-w-md mx-auto space-y-4">
-          <div className="flex items-center space-x-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h1 className="text-xl font-semibold">แจ้งโอน/อัปโหลดสลิป</h1>
+          <div className="flex items-center space-x-3 mb-2">
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="border-none bg-transparent"
+            >
+              <span className="inline-flex items-center justify-center rounded-full p-1 hover:bg-[#F3EAD6]">
+                <ArrowLeft className="h-5 w-5 text-[#BFA14A]" />
+              </span>
+            </button>
+            <div className="flex flex-col items-center">
+              <div className="text-2xl mb-1" style={{ color: '#BFA14A' }}>🚿</div>
+              <span className="text-lg font-bold" style={{ color: '#BFA14A' }}>SHOWER STATION</span>
+            </div>
           </div>
-          
-          <Card>
+          <Card className="rounded-xl shadow-md">
             <CardContent className="p-6 text-center">
               <div className="text-6xl mb-4">❌</div>
-              <h2 className="text-lg font-semibold mb-2">ไม่พบคิวที่ต้องชำระเงิน</h2>
-              <p className="text-gray-600 mb-4">
-                กรุณาสร้างคิวใหม่หรือรอให้เจ้าหน้าที่เรียกคิวของคุณ
-              </p>
-              <Button onClick={() => navigate('/dashboard')}>
+              <h2 className="text-lg font-semibold mb-2 text-[#BFA14A]">ไม่พบคิวที่ต้องชำระเงิน</h2>
+              <p className="text-gray-700 mb-4">กรุณาสร้างคิวใหม่หรือรอให้เรียกคิวของคุณ</p>
+              <button onClick={() => navigate('/dashboard')} className="w-full border border-[#BFA14A] text-[#BFA14A] rounded-md font-semibold py-2 hover:bg-[#BFA14A] hover:text-white transition">
                 กลับหน้าหลัก
-              </Button>
+              </button>
             </CardContent>
           </Card>
         </div>
@@ -166,142 +169,58 @@ const UploadSlip = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="min-h-screen bg-[#FAF6EF] p-4">
       <div className="max-w-md mx-auto space-y-4">
-        <div className="flex items-center space-x-3">
-          <Button 
-            variant="ghost" 
-            size="sm" 
+        <div className="flex items-center space-x-3 mb-2">
+          <button
+            type="button"
             onClick={() => navigate('/dashboard')}
+            className="border-none bg-transparent"
           >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <h1 className="text-xl font-semibold">แจ้งโอน/อัปโหลดสลิป</h1>
+            <span className="inline-flex items-center justify-center rounded-full p-1 hover:bg-[#F3EAD6]">
+              <ArrowLeft className="h-5 w-5 text-[#BFA14A]" />
+            </span>
+          </button>
+          <div className="flex flex-col items-center">
+            <div className="text-2xl mb-1" style={{ color: '#BFA14A' }}>🚿</div>
+            <span className="text-lg font-bold" style={{ color: '#BFA14A' }}>SHOWER STATION</span>
+          </div>
         </div>
-
-        <Card className="border-green-200 bg-green-50">
+        <Card className="border-[#BFA14A] bg-[#F3EAD6] rounded-xl shadow-md">
           <CardHeader>
-            <CardTitle className="text-lg text-green-700 flex items-center space-x-2">
-              <CheckCircle className="h-5 w-5" />
-              <span>คิวของคุณถูกเรียกแล้ว!</span>
+            <CardTitle className="text-lg text-[#BFA14A] flex items-center space-x-2">
+              <Upload className="h-5 w-5" style={{ color: '#BFA14A' }} />
+              <span>อัปโหลดสลิป</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
+            <div className="space-y-2 text-gray-700">
               <div className="flex justify-between items-center">
                 <span>หมายเลขคิว:</span>
-                <Badge variant="outline" className="text-lg font-bold">
-                  {activeQueue.queue_number}
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>ชื่อ:</span>
-                <span>{activeQueue.user?.first_name} {activeQueue.user?.last_name}</span>
+                <Badge variant="outline" className="text-lg font-bold border-[#BFA14A] text-[#BFA14A]">{activeQueue.queue_number}</Badge>
               </div>
               <div className="flex justify-between items-center">
                 <span>จำนวนเงิน:</span>
-                <span className="font-semibold text-lg">฿{activeQueue.price}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>สถานะ:</span>
-                <Badge className="bg-green-500 hover:bg-green-600">
-                  รอชำระเงิน
-                </Badge>
+                <span className="font-semibold text-lg text-[#BFA14A]">฿{activeQueue.price}</span>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">วิธีการชำระเงิน</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="bg-blue-50 p-3 rounded-lg">
-              <p className="text-sm text-blue-700 font-medium">📱 เป๋าตุง KTB</p>
-              <p className="text-xs text-blue-600 mt-1">
-                1. สแกน QR Code ที่เคาน์เตอร์<br/>
-                2. ชำระเงิน ฿{activeQueue.price}<br/>
-                3. เก็บสลิปการโอนเงิน<br/>
-                4. กลับมาอัปโหลดสลิปที่นี่
-              </p>
-            </div>
-            
-            <div className="bg-green-50 p-3 rounded-lg">
-              <p className="text-sm text-green-700 font-medium">💰 PromptPay</p>
-              <p className="text-xs text-green-600 mt-1">
-                เลขบัญชี: 012-345-6789<br/>
-                ชื่อบัญชี: Shower Station Co.,Ltd.<br/>
-                จำนวนเงิน: ฿{activeQueue.price}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">อัปโหลดสลิปการโอนเงิน</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="slip">เลือกไฟล์สลิป (JPG, PNG)</Label>
+            <div className="mt-4">
+              <Label htmlFor="slip" className="text-gray-700">เลือกไฟล์สลิป</Label>
               <Input
                 id="slip"
                 type="file"
                 accept="image/*"
                 onChange={handleFileSelect}
-                className="mt-1"
+                className="rounded-md border-[#BFA14A] focus:border-[#BFA14A] focus:ring-[#BFA14A] bg-[#FAF6EF] text-gray-800 mt-2"
               />
-              {selectedFile && (
-                <p className="text-sm text-green-600 mt-1">
-                  ✓ เลือกไฟล์: {selectedFile.name}
-                </p>
-              )}
             </div>
-
-            <Button 
+            <button
               onClick={handleUpload}
-              className="w-full"
-              disabled={!selectedFile || isUploading}
+              className="w-full mt-4 border border-[#BFA14A] text-[#BFA14A] rounded-md font-semibold py-2 hover:bg-[#BFA14A] hover:text-white transition"
+              disabled={isUploading}
             >
-              {isUploading ? (
-                <>
-                  <Upload className="mr-2 h-4 w-4 animate-spin" />
-                  กำลังอัปโหลด...
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  อัปโหลดสลิป
-                </>
-              )}
-            </Button>
-
-            <p className="text-xs text-gray-500 text-center">
-              หลังอัปโหลดสำเร็จ รอเจ้าหน้าที่ตรวจสอบ 2-3 นาที
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">ข้อมูลการติดต่อ</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>เบอร์โทร:</span>
-                <span>{activeQueue.user?.phone_number}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>อีเมล:</span>
-                <span>{activeQueue.user?.email || 'ไม่ระบุ'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>เวลาสร้างคิว:</span>
-                <span>{new Date(activeQueue.created_at).toLocaleTimeString('th-TH')}</span>
-              </div>
-            </div>
+              {isUploading ? 'กำลังอัปโหลด...' : 'อัปโหลดสลิป'}
+            </button>
           </CardContent>
         </Card>
       </div>
@@ -310,3 +229,4 @@ const UploadSlip = () => {
 };
 
 export default UploadSlip;
+

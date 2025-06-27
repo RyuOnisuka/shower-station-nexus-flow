@@ -156,56 +156,62 @@ const Register = () => {
   const showRestroomChoice = formData.gender === 'unspecified';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen bg-[#FAF6EF] p-4">
       <div className="max-w-md mx-auto">
         <div className="flex items-center mb-6">
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
+            type="button"
             onClick={() => navigate('/login')}
-            className="mr-2"
+            className="mr-2 border-none bg-transparent"
           >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+            <span className="inline-flex items-center justify-center rounded-full p-1 hover:bg-[#F3EAD6]">
+              <ArrowLeft className="h-5 w-5 text-[#BFA14A]" />
+            </span>
+          </button>
           <div className="text-center flex-1">
-            <h1 className="text-2xl font-bold text-blue-600">
-              🚿 Shower Station
-            </h1>
-            <p className="text-gray-600">ลงทะเบียนสมาชิกใหม่</p>
+            <div className="flex flex-col items-center">
+              <div className="text-3xl mb-1" style={{ color: '#BFA14A' }}>🚿</div>
+              <h1 className="text-2xl font-bold" style={{ color: '#BFA14A' }}>
+                SHOWER STATION
+              </h1>
+            </div>
+            <p className="text-gray-700">ลงทะเบียนสมาชิกใหม่</p>
           </div>
         </div>
 
-        <Card>
+        <Card className="rounded-xl shadow-md">
           <CardHeader>
-            <CardTitle className="text-xl">ข้อมูลส่วนตัว</CardTitle>
+            <CardTitle className="text-xl text-[#BFA14A]">ข้อมูลส่วนตัว</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="firstName">ชื่อ *</Label>
+                  <Label htmlFor="firstName" className="text-gray-700">ชื่อ *</Label>
                   <Input
                     id="firstName"
                     value={formData.firstName}
                     onChange={(e) => handleInputChange('firstName', e.target.value)}
                     placeholder="ชื่อจริง"
                     required
+                    className="rounded-md border-[#BFA14A] focus:border-[#BFA14A] focus:ring-[#BFA14A] bg-[#FAF6EF] text-gray-800"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="lastName">นามสกุล *</Label>
+                  <Label htmlFor="lastName" className="text-gray-700">นามสกุล *</Label>
                   <Input
                     id="lastName"
                     value={formData.lastName}
                     onChange={(e) => handleInputChange('lastName', e.target.value)}
                     placeholder="นามสกุล"
                     required
+                    className="rounded-md border-[#BFA14A] focus:border-[#BFA14A] focus:ring-[#BFA14A] bg-[#FAF6EF] text-gray-800"
                   />
                 </div>
               </div>
 
               <div>
-                <Label htmlFor="phoneNumber">เบอร์โทรศัพท์ *</Label>
+                <Label htmlFor="phoneNumber" className="text-gray-700">เบอร์โทรศัพท์ *</Label>
                 <Input
                   id="phoneNumber"
                   type="tel"
@@ -213,22 +219,24 @@ const Register = () => {
                   onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
                   placeholder="0xx-xxx-xxxx"
                   required
+                  className="rounded-md border-[#BFA14A] focus:border-[#BFA14A] focus:ring-[#BFA14A] bg-[#FAF6EF] text-gray-800"
                 />
               </div>
 
               <div>
-                <Label htmlFor="email">อีเมล</Label>
+                <Label htmlFor="email" className="text-gray-700">อีเมล</Label>
                 <Input
                   id="email"
                   type="email"
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
                   placeholder="example@email.com"
+                  className="rounded-md border-[#BFA14A] focus:border-[#BFA14A] focus:ring-[#BFA14A] bg-[#FAF6EF] text-gray-800"
                 />
               </div>
 
               <div>
-                <Label className="text-base font-medium">เพศ</Label>
+                <Label className="text-base font-medium text-gray-700">เพศ</Label>
                 <RadioGroup
                   value={formData.gender}
                   onValueChange={(value) => handleInputChange('gender', value)}
@@ -251,7 +259,7 @@ const Register = () => {
 
               {showRestroomChoice && (
                 <div>
-                  <Label className="text-base font-medium">ห้องน้ำที่ต้องการใช้</Label>
+                  <Label className="text-base font-medium text-gray-700">ห้องน้ำที่ต้องการใช้</Label>
                   <RadioGroup
                     value={formData.restroomPref}
                     onValueChange={(value) => handleInputChange('restroomPref', value)}
@@ -270,7 +278,7 @@ const Register = () => {
               )}
 
               <div>
-                <Label className="text-base font-medium">ประเภทสมาชิก</Label>
+                <Label className="text-base font-medium text-gray-700">ประเภทสมาชิก</Label>
                 <RadioGroup
                   value={formData.userType}
                   onValueChange={(value) => handleInputChange('userType', value)}
@@ -293,13 +301,14 @@ const Register = () => {
 
               {formData.userType === 'employee' && (
                 <div>
-                  <Label htmlFor="employeeId">รหัสพนักงาน *</Label>
+                  <Label htmlFor="employeeId" className="text-gray-700">รหัสพนักงาน *</Label>
                   <Input
                     id="employeeId"
                     value={formData.employeeId}
                     onChange={(e) => handleInputChange('employeeId', e.target.value)}
                     placeholder="EMP12345"
                     required
+                    className="rounded-md border-[#BFA14A] focus:border-[#BFA14A] focus:ring-[#BFA14A] bg-[#FAF6EF] text-gray-800"
                   />
                   <p className="text-xs text-amber-600 mt-1">
                     * ต้องรอการอนุมัติจากแอดมิน
@@ -309,13 +318,14 @@ const Register = () => {
 
               {formData.userType === 'dependent' && (
                 <div>
-                  <Label htmlFor="guardianEmployeeId">รหัสพนักงานผู้ดูแล *</Label>
+                  <Label htmlFor="guardianEmployeeId" className="text-gray-700">รหัสพนักงานผู้ดูแล *</Label>
                   <Input
                     id="guardianEmployeeId"
                     value={formData.guardianEmployeeId}
                     onChange={(e) => handleInputChange('guardianEmployeeId', e.target.value)}
                     placeholder="EMP12345"
                     required
+                    className="rounded-md border-[#BFA14A] focus:border-[#BFA14A] focus:ring-[#BFA14A] bg-[#FAF6EF] text-gray-800"
                   />
                   <p className="text-xs text-amber-600 mt-1">
                     * ต้องรอการอนุมัติจากแอดมิน
@@ -323,20 +333,20 @@ const Register = () => {
                 </div>
               )}
 
-              <Button
+              <button
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700"
+                className="w-full border border-[#BFA14A] text-[#BFA14A] rounded-md font-semibold py-2 hover:bg-[#BFA14A] hover:text-white transition"
                 disabled={isLoading}
               >
                 {isLoading ? 'กำลังลงทะเบียน...' : 'ลงทะเบียน'}
-              </Button>
+              </button>
             </form>
 
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg text-center">
-              <p className="text-xs text-gray-600">
+            <div className="mt-6 p-4 bg-[#F3EAD6] rounded-lg text-center">
+              <p className="text-xs text-gray-700">
                 การลงทะเบียนแสดงว่าคุณยอมรับ
                 <br />
-                <span className="text-blue-600 underline cursor-pointer">
+                <span className="text-[#BFA14A] underline cursor-pointer">
                   ข้อกำหนดและเงื่อนไขการใช้บริการ
                 </span>
               </p>

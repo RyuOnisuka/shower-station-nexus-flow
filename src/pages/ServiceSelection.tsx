@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Clock, Calendar, Users } from 'lucide-react';
 import { useQueues } from '@/hooks/useDatabase';
@@ -21,15 +20,15 @@ const ServiceSelection = () => {
       id: 'walkin',
       name: 'Walk-in',
       description: 'มาใช้บริการทันที',
-      icon: <Clock className="h-6 w-6" />,
-      color: 'bg-blue-500'
+      icon: <Clock className="h-6 w-6" style={{ color: '#BFA14A' }} />,
+      color: 'bg-[#F3EAD6]'
     },
     {
       id: 'booking',
       name: 'จองล่วงหน้า',
       description: 'จองเวลาใช้บริการล่วงหน้า',
-      icon: <Calendar className="h-6 w-6" />,
-      color: 'bg-green-500'
+      icon: <Calendar className="h-6 w-6" style={{ color: '#BFA14A' }} />,
+      color: 'bg-[#F3EAD6]'
     }
   ];
 
@@ -64,7 +63,6 @@ const ServiceSelection = () => {
 
     setIsLoading(true);
     try {
-      // Get user info
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         toast.error('กรุณาเข้าสู่ระบบ');
@@ -72,7 +70,6 @@ const ServiceSelection = () => {
         return;
       }
 
-      // Get user profile
       const { data: userProfile } = await supabase
         .from('users')
         .select('*')
@@ -84,22 +81,20 @@ const ServiceSelection = () => {
         return;
       }
 
-      // Determine gender for queue number
       let gender = 'unisex';
       if (userProfile.gender) {
         gender = userProfile.gender;
       }
 
       const queueNumber = generateQueueNumber(selectedBookingType, gender);
-      const price = 50; // Default price for all services
+      const price = 50;
 
-      // Create queue
       const { data: queue, error } = await supabase
         .from('queues')
         .insert({
           user_id: user.id,
           queue_number: queueNumber,
-          service_type: 'general', // General service type
+          service_type: 'general',
           price: price,
           status: 'waiting',
           booking_time: selectedBookingType === 'booking' ? new Date().toISOString() : null
@@ -108,7 +103,6 @@ const ServiceSelection = () => {
         .single();
 
       if (error) {
-        console.error('Error creating queue:', error);
         toast.error('เกิดข้อผิดพลาดในการสร้างคิว');
         return;
       }
@@ -123,7 +117,6 @@ const ServiceSelection = () => {
       });
 
     } catch (error) {
-      console.error('Error:', error);
       toast.error('เกิดข้อผิดพลาด');
     } finally {
       setIsLoading(false);
@@ -131,50 +124,58 @@ const ServiceSelection = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="min-h-screen bg-[#FAF6EF] p-4">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center space-x-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <h1 className="text-2xl font-bold">เลือกบริการ</h1>
+        <div className="flex items-center space-x-3 mb-2">
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            className="border-none bg-transparent"
+          >
+            <span className="inline-flex items-center justify-center rounded-full p-1 hover:bg-[#F3EAD6]">
+              <ArrowLeft className="h-5 w-5 text-[#BFA14A]" />
+            </span>
+          </button>
+          <div className="flex flex-col items-center">
+            <div className="text-2xl mb-1" style={{ color: '#BFA14A' }}>🚿</div>
+            <span className="text-lg font-bold" style={{ color: '#BFA14A' }}>SHOWER STATION</span>
+          </div>
         </div>
 
         {/* Current Queue Status */}
-        <Card>
+        <Card className="rounded-xl shadow-md">
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Users className="h-5 w-5" />
+            <CardTitle className="flex items-center space-x-2 text-[#BFA14A]">
+              <Users className="h-5 w-5" style={{ color: '#BFA14A' }} />
               <span>สถานะคิวปัจจุบัน</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-[#F3EAD6] rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <Clock className="h-6 w-6 text-blue-600" />
+                  <Clock className="h-6 w-6" style={{ color: '#BFA14A' }} />
                   <div>
-                    <div className="font-semibold">Walk-in</div>
-                    <div className="text-sm text-gray-600">มาใช้บริการทันที</div>
+                    <div className="font-semibold text-[#BFA14A]">Walk-in</div>
+                    <div className="text-sm text-gray-700">มาใช้บริการทันที</div>
                   </div>
                 </div>
-                <Badge variant="secondary" className="text-lg font-bold">
-                  {getCurrentQueueCount('walkin')} คน
-                </Badge>
+                <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-[#BFA14A] text-white">
+                  {getCurrentQueueCount('walkin')} คิว
+                </span>
               </div>
-              
-              <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-[#F3EAD6] rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <Calendar className="h-6 w-6 text-green-600" />
+                  <Calendar className="h-6 w-6" style={{ color: '#BFA14A' }} />
                   <div>
-                    <div className="font-semibold">จองล่วงหน้า</div>
-                    <div className="text-sm text-gray-600">จองเวลาใช้บริการ</div>
+                    <div className="font-semibold text-[#BFA14A]">จองล่วงหน้า</div>
+                    <div className="text-sm text-gray-700">จองเวลาใช้บริการล่วงหน้า</div>
                   </div>
                 </div>
-                <Badge variant="secondary" className="text-lg font-bold">
-                  {getCurrentQueueCount('booking')} คน
-                </Badge>
+                <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-[#BFA14A] text-white">
+                  {getCurrentQueueCount('booking')} คิว
+                </span>
               </div>
             </div>
           </CardContent>
@@ -182,45 +183,36 @@ const ServiceSelection = () => {
 
         {/* Booking Type Selection */}
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold">เลือกประเภทการจอง</h2>
+          <h2 className="text-lg font-semibold text-[#BFA14A]">เลือกประเภทการจอง</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {bookingTypes.map((type) => (
               <Card
                 key={type.id}
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  selectedBookingType === type.id ? 'ring-2 ring-blue-500' : ''
+                className={`cursor-pointer rounded-xl shadow-md transition-all hover:shadow-lg ${
+                  selectedBookingType === type.id ? 'ring-2 ring-[#BFA14A]' : ''
                 }`}
                 onClick={() => setSelectedBookingType(type.id as BookingType)}
               >
                 <CardContent className="p-6">
                   <div className="flex items-center space-x-3">
-                    <div className={`p-2 rounded-lg ${type.color} text-white`}>
-                      {type.icon}
-                    </div>
+                    <div className={`p-2 rounded-lg ${type.color} text-[#BFA14A]`}>{type.icon}</div>
                     <div>
-                      <h3 className="font-semibold">{type.name}</h3>
-                      <p className="text-sm text-gray-600">{type.description}</p>
+                      <div className="font-semibold text-[#BFA14A]">{type.name}</div>
+                      <div className="text-sm text-gray-700">{type.description}</div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
+          <button
+            onClick={handleServiceSelect}
+            className="w-full border border-[#BFA14A] text-[#BFA14A] rounded-md font-semibold py-2 hover:bg-[#BFA14A] hover:text-white transition"
+            disabled={isLoading}
+          >
+            {isLoading ? 'กำลังดำเนินการ...' : 'ยืนยันการเลือก'}
+          </button>
         </div>
-
-        {/* Continue Button */}
-        {selectedBookingType && (
-          <div className="flex justify-center pt-6">
-            <Button 
-              onClick={handleServiceSelect}
-              disabled={isLoading}
-              size="lg"
-              className="w-full max-w-md"
-            >
-              {isLoading ? 'กำลังสร้างคิว...' : 'ดำเนินการต่อ'}
-            </Button>
-          </div>
-        )}
       </div>
     </div>
   );

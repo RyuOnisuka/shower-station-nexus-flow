@@ -194,36 +194,49 @@ const AdminPanel = () => {
 
   if (queuesLoading || lockersLoading || pendingUsersLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-[#FAF6EF] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#BFA14A]"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="min-h-screen bg-[#FAF6EF] p-4">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h1 className="text-2xl font-bold">Admin Panel</h1>
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="border-none bg-transparent"
+            >
+              <span className="inline-flex items-center justify-center rounded-full p-1 hover:bg-[#F3EAD6]">
+                <ArrowLeft className="h-5 w-5 text-[#BFA14A]" />
+              </span>
+            </button>
+            <div className="flex flex-col items-center">
+              <div className="text-2xl mb-1" style={{ color: '#BFA14A' }}>🚿</div>
+              <span className="text-lg font-bold" style={{ color: '#BFA14A' }}>SHOWER STATION</span>
+            </div>
+            <h1 className="text-2xl font-bold text-[#BFA14A] ml-4">Admin Panel</h1>
           </div>
-          <Button onClick={() => refetchQueues()} variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <button
+            onClick={() => refetchQueues()}
+            className="border border-[#BFA14A] text-[#BFA14A] rounded-md px-3 py-1 font-semibold hover:bg-[#BFA14A] hover:text-white transition"
+          >
+            <RefreshCw className="h-4 w-4 mr-2 inline-block" />
             รีเฟรช
-          </Button>
+          </button>
         </div>
 
-        <Tabs defaultValue="queues" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="queues">จัดการคิว</TabsTrigger>
-            <TabsTrigger value="payments">การชำระเงิน</TabsTrigger>
-            <TabsTrigger value="users">อนุมัติสมาชิก</TabsTrigger>
-            <TabsTrigger value="lockers">ตู้ล็อกเกอร์</TabsTrigger>
-            <TabsTrigger value="stats">สถิติ</TabsTrigger>
+        <Tabs defaultValue="queues" className="w-full">
+          <TabsList className="grid w-full grid-cols-5 rounded-xl bg-[#F3EAD6]">
+            <TabsTrigger value="queues" className="text-[#BFA14A]">จัดการคิว</TabsTrigger>
+            <TabsTrigger value="payments" className="text-[#BFA14A]">การชำระเงิน</TabsTrigger>
+            <TabsTrigger value="users" className="text-[#BFA14A]">อนุมัติสมาชิก</TabsTrigger>
+            <TabsTrigger value="lockers" className="text-[#BFA14A]">ตู้ล็อกเกอร์</TabsTrigger>
+            <TabsTrigger value="stats" className="text-[#BFA14A]">สถิติ</TabsTrigger>
           </TabsList>
 
           <TabsContent value="queues">
