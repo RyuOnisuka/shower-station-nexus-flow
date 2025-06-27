@@ -1,232 +1,227 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { Clock, User, MapPin, Phone, Calendar, Upload, History, Settings } from 'lucide-react';
-import { useQueues, useCreateQueue } from '@/hooks/useDatabase';
+import { ArrowLeft, Clock, MapPin, CreditCard, History } from 'lucide-react';
+import { useQueues } from '@/hooks/useDatabase';
 
 const Dashboard = () => {
-  const [showCreateQueue, setShowCreateQueue] = useState(false);
-  const [userForm, setUserForm] = useState({
-    phone_number: '',
-    first_name: '',
-    last_name: '',
-    gender: 'male',
-    restroom_pref: 'male'
-  });
-  
   const navigate = useNavigate();
-  const { data: queues, isLoading } = useQueues();
-  const createQueueMutation = useCreateQueue();
+  const { data: queues, refetch } = useQueues();
+  const [currentQueue, setCurrentQueue] = useState(null);
+  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
 
-  // หาคิวของผู้ใช้ปัจจุบัน (จำลอง)
-  const currentUserQueue = queues?.find(q => 
-    q.status === 'waiting' || q.status === 'called' || q.status === 'processing'
-  );
-
-  const handleCreateQueue = async () => {
-    if (!userForm.phone_number || !userForm.first_name || !userForm.last_name) {
-      toast.error('กรุณากรอกข้อมูลให้ครบ');
-      return;
+  useEffect(() => {
+    // Check for newly created queue from localStorage
+    const newQueue = localStorage.getItem('currentQueue');
+    if (newQueue) {
+      setCurrentQueue(JSON.parse(newQueue));
+      localStorage.removeItem('currentQueue');
+    } else {
+      // Find user's active queue
+      const userQueue = queues?.find(q => 
+        q.user?.phone_number === userData.phone_number && 
+        ['waiting', 'called', 'processing'].includes(q.status)
+      );
+      setCurrentQueue(userQueue || null);
     }
+  }, [queues, userData.phone_number]);
 
-    try {
-      await createQueueMutation.mutateAsync(userForm);
-      toast.success('สร้างคิวสำเร็จ!');
-      setShowCreateQueue(false);
-      setUserForm({
-        phone_number: '',
-        first_name: '',
-        last_name: '',
-        gender: 'male',
-        restroom_pref: 'male'
-      });
-    } catch (error) {
-      toast.error('เกิดข้อผิดพลาดในการสร้างคิว');
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'waiting': return 'รอเรียกคิว';
+      case 'called': return 'เรียกคิวแล้ว - รอชำระเงิน';
+      case 'processing': return 'กำลังใช้บริการ';
+      case 'completed': return 'ใช้บริการเสร็จสิ้น';
+      default: return status;
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">กำลังโหลด...</p>
-        </div>
-      </div>
-    );
-  }
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'waiting': return 'bg-yellow-500';
+      case 'called': return 'bg-green-500';
+      case 'processing': return 'bg-blue-500';
+      case 'completed': return 'bg-gray-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  const handlePayment = () => {
+    if (currentQueue?.status === 'called') {
+      navigate('/upload-slip');
+    } else {
+      toast.error('คิวยังไม่ถูกเรียก');
+    }
+  };
+
+  const handleRefresh = () => {
+    refetch();
+    toast.success('รีเฟรชข้อมูลแล้ว');
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-md mx-auto space-y-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="max-w-md mx-auto space-y-6">
         {/* Header */}
-        <Card>
-          <CardHeader className="text-center pb-2">
-            <CardTitle className="text-xl text-blue-600">
-              🚿 Shower Station
-            </CardTitle>
-            <p className="text-sm text-gray-600">ยินดีต้อนรับ</p>
-          </CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/service-selection')}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <h1 className="text-xl font-bold text-gray-800">Dashboard</h1>
+          </div>
+          <Button onClick={handleRefresh} variant="outline" size="sm">
+            รีเฟรช
+          </Button>
+        </div>
+
+        {/* Welcome Card */}
+        <Card className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
+          <CardContent className="p-6 text-center">
+            <h2 className="text-lg font-semibold text-gray-800">
+              สวัสดี คุณ{userData.first_name} {userData.last_name}
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              ประเภทสมาชิก: {
+                userData.user_type === 'employee' ? 'พนักงาน' : 
+                userData.user_type === 'dependent' ? 'ผู้ติดตาม' : 'ทั่วไป'
+              }
+            </p>
+          </CardContent>
         </Card>
 
-        {/* Current Queue Status */}
-        {currentUserQueue && (
-          <Card className="border-blue-200 bg-blue-50">
+        {/* Current Queue Card */}
+        {currentQueue ? (
+          <Card className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-lg text-blue-700">
-                คิวปัจจุบัน
-              </CardTitle>
+              <CardTitle className="text-center text-gray-800">คิวปัจจุบัน</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span>หมายเลขคิว:</span>
-                  <Badge variant="outline" className="text-lg font-bold">
-                    {currentUserQueue.queue_number}
-                  </Badge>
+            <CardContent className="space-y-4">
+              <div className="text-center">
+                <div className="text-4xl font-bold text-blue-600 mb-2">
+                  {currentQueue.queue_number}
                 </div>
+                <Badge className={`${getStatusColor(currentQueue.status)} hover:${getStatusColor(currentQueue.status)}`}>
+                  {getStatusText(currentQueue.status)}
+                </Badge>
+              </div>
+
+              <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span>สถานะ:</span>
-                  <Badge className={
-                    currentUserQueue.status === 'waiting' ? 'bg-yellow-500' :
-                    currentUserQueue.status === 'called' ? 'bg-green-500' :
-                    'bg-blue-500'
-                  }>
-                    {currentUserQueue.status === 'waiting' ? 'รอเรียกคิว' :
-                     currentUserQueue.status === 'called' ? 'เรียกคิวแล้ว' :
-                     'กำลังใช้บริการ'}
-                  </Badge>
+                  <span className="text-gray-600">ประเภทบริการ:</span>
+                  <span className="font-medium">
+                    {currentQueue.serviceType === 'booking' ? 'จองล่วงหน้า' : 'Walk-in'}
+                  </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span>ราคา:</span>
-                  <span className="font-semibold">฿{currentUserQueue.price}</span>
-                </div>
-                {currentUserQueue.locker_number && (
+
+                {currentQueue.booking_time && (
                   <div className="flex justify-between items-center">
-                    <span>ตู้ล็อกเกอร์:</span>
-                    <span className="font-semibold">{currentUserQueue.locker_number}</span>
+                    <span className="text-gray-600">เวลาจอง:</span>
+                    <span className="font-medium">
+                      {new Date(currentQueue.booking_time).toLocaleTimeString('th-TH', { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                      })} น.
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">ราคา:</span>
+                  <span className="font-medium text-lg">฿{currentQueue.price}</span>
+                </div>
+
+                {currentQueue.locker_number && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">ตู้ล็อกเกอร์:</span>
+                    <Badge variant="outline" className="font-bold">
+                      {currentQueue.locker_number}
+                    </Badge>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">เวลาสร้างคิว:</span>
+                  <span className="text-sm">
+                    {new Date(currentQueue.created_at).toLocaleString('th-TH')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-4">
+                {currentQueue.status === 'called' && (
+                  <Button 
+                    onClick={handlePayment}
+                    className="w-full bg-green-600 hover:bg-green-700"
+                  >
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    ชำระเงิน/อัปโหลดสลิป
+                  </Button>
+                )}
+
+                {currentQueue.status === 'processing' && currentQueue.locker_number && (
+                  <div className="bg-blue-50 p-4 rounded-lg text-center">
+                    <MapPin className="h-6 w-6 mx-auto mb-2 text-blue-600" />
+                    <p className="text-blue-700 font-medium">
+                      กรุณาไปที่ตู้ล็อกเกอร์หมายเลข {currentQueue.locker_number}
+                    </p>
                   </div>
                 )}
               </div>
             </CardContent>
           </Card>
+        ) : (
+          <Card className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
+            <CardContent className="p-6 text-center">
+              <div className="text-6xl mb-4">📋</div>
+              <h2 className="text-lg font-semibold text-gray-800 mb-2">ไม่มีคิวที่ใช้งาน</h2>
+              <p className="text-gray-600 mb-4">คุณไม่มีคิวที่กำลังรอใช้บริการในขณะนี้</p>
+              <Button 
+                onClick={() => navigate('/service-selection')}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                สร้างคิวใหม่
+              </Button>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Rich Menu - Updated to match LINE OA requirements */}
-        <Card>
+        {/* Quick Actions */}
+        <Card className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
           <CardHeader>
-            <CardTitle className="text-lg text-center">📱 Rich Menu</CardTitle>
+            <CardTitle className="text-center text-gray-800">เมนูหลัก</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              {/* Left Column */}
-              <div className="space-y-3">
-                {/* สมัครสมาชิก/เข้าใช้บริการ */}
-                <Card className="cursor-pointer hover:shadow-md transition-shadow bg-blue-50 border-blue-200">
-                  <CardContent 
-                    className="p-3 text-center" 
-                    onClick={() => navigate('/service-selection')}
-                  >
-                    <div className="text-2xl mb-1">👤</div>
-                    <h3 className="font-semibold text-xs">สมัครสมาชิก/</h3>
-                    <h3 className="font-semibold text-xs">เข้าใช้บริการ</h3>
-                  </CardContent>
-                </Card>
+          <CardContent className="space-y-3">
+            <Button 
+              variant="outline" 
+              className="w-full justify-start"
+              onClick={() => navigate('/service-selection')}
+            >
+              <Clock className="h-4 w-4 mr-2" />
+              สร้างคิวใหม่
+            </Button>
+            
+            <Button 
+              variant="outline" 
+              className="w-full justify-start"
+              onClick={() => navigate('/history')}
+            >
+              <History className="h-4 w-4 mr-2" />
+              ประวัติการใช้บริการ
+            </Button>
 
-                {/* แจ้งโอน/อัปโหลดสลิป */}
-                <Card className="cursor-pointer hover:shadow-md transition-shadow bg-green-50 border-green-200">
-                  <CardContent 
-                    className="p-3 text-center" 
-                    onClick={() => navigate('/upload-slip')}
-                  >
-                    <Upload className="h-6 w-6 mx-auto mb-1 text-green-600" />
-                    <h3 className="font-semibold text-xs">แจ้งโอน/</h3>
-                    <h3 className="font-semibold text-xs">อัปโหลดสลิป</h3>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Right Column */}
-              <div className="space-y-3">
-                {/* ประวัติการใช้บริการ */}
-                <Card className="cursor-pointer hover:shadow-md transition-shadow bg-purple-50 border-purple-200">
-                  <CardContent 
-                    className="p-3 text-center" 
-                    onClick={() => navigate('/history')}
-                  >
-                    <History className="h-6 w-6 mx-auto mb-1 text-purple-600" />
-                    <h3 className="font-semibold text-xs">ประวัติการ</h3>
-                    <h3 className="font-semibold text-xs">ใช้บริการ</h3>
-                  </CardContent>
-                </Card>
-
-                {/* จัดการระบบ (Admin) */}
-                <Card className="cursor-pointer hover:shadow-md transition-shadow bg-orange-50 border-orange-200">
-                  <CardContent 
-                    className="p-3 text-center"
-                    onClick={() => navigate('/admin')}
-                  >
-                    <Settings className="h-6 w-6 mx-auto mb-1 text-orange-600" />
-                    <h3 className="font-semibold text-xs">จัดการระบบ</h3>
-                    <h3 className="font-semibold text-xs">(Admin)</h3>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Queue Summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">สถานการณ์คิววันนี้</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <div className="text-2xl font-bold text-blue-600">
-                  {queues?.filter(q => q.status === 'waiting').length || 0}
-                </div>
-                <div className="text-sm text-gray-600">รอคิว</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-green-600">
-                  {queues?.filter(q => q.status === 'processing').length || 0}
-                </div>
-                <div className="text-sm text-gray-600">ใช้งาน</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-600">
-                  {queues?.filter(q => q.status === 'completed').length || 0}
-                </div>
-                <div className="text-sm text-gray-600">เสร็จสิ้น</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Contact Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">ข้อมูลติดต่อ</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex items-center space-x-2">
-              <MapPin className="h-4 w-4 text-blue-500" />
-              <span className="text-sm">123 ถนนสีลม เขตบางรัก กรุงเทพฯ</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Phone className="h-4 w-4 text-blue-500" />
-              <span className="text-sm">02-123-4567</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Clock className="h-4 w-4 text-blue-500" />
-              <span className="text-sm">เปิดบริการ 07:00 - 21:00 น.</span>
-            </div>
+            <Button 
+              variant="outline" 
+              className="w-full justify-start"
+              onClick={() => navigate('/admin')}
+            >
+              🔧 หน้าแอดมิน
+            </Button>
           </CardContent>
         </Card>
       </div>

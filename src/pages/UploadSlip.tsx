@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Upload, CheckCircle, Clock } from 'lucide-react';
 import { useQueues } from '@/hooks/useDatabase';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -17,11 +16,17 @@ const UploadSlip = () => {
   const navigate = useNavigate();
   
   const { data: queues } = useQueues();
+  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
 
-  // หาคิวที่ถูกเรียกและยังไม่ได้ชำระเงิน
   const activeQueue = queues?.find(q => 
+    q.user?.phone_number === userData.phone_number &&
     q.status === 'called' && 
     (!q.payment || q.payment.every((p: any) => p.status !== 'approved'))
+  );
+
+  const pendingPaymentQueue = queues?.find(q => 
+    q.user?.phone_number === userData.phone_number &&
+    q.payment && q.payment.some((p: any) => p.status === 'pending')
   );
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,10 +50,8 @@ const UploadSlip = () => {
     setIsUploading(true);
     
     try {
-      // จำลองการอัปโหลดไฟล์ (ในการใช้งานจริงจะใช้ Supabase Storage)
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // บันทึกข้อมูลการชำระเงิน
       const { error } = await supabase
         .from('payments')
         .insert({
@@ -62,7 +65,7 @@ const UploadSlip = () => {
       if (error) throw error;
 
       toast.success('อัปโหลดสลิปสำเร็จ! รอตรวจสอบจากเจ้าหน้าที่');
-      navigate('/payment-success');
+      navigate('/dashboard');
     } catch (error) {
       toast.error('เกิดข้อผิดพลาดในการอัปโหลด');
       console.error('Upload error:', error);
@@ -70,6 +73,69 @@ const UploadSlip = () => {
       setIsUploading(false);
     }
   };
+
+  // Show pending payment status
+  if (pendingPaymentQueue) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-md mx-auto space-y-4">
+          <div className="flex items-center space-x-3">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <h1 className="text-xl font-semibold">สถานะการชำระเงิน</h1>
+          </div>
+          
+          <Card className="border-yellow-200 bg-yellow-50">
+            <CardHeader>
+              <CardTitle className="text-lg text-yellow-700 flex items-center space-x-2">
+                <Clock className="h-5 w-5" />
+                <span>รอการตรวจสอบ</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span>หมายเลขคิว:</span>
+                  <Badge variant="outline" className="text-lg font-bold">
+                    {pendingPaymentQueue.queue_number}
+                  </Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>จำนวนเงิน:</span>
+                  <span className="font-semibold text-lg">฿{pendingPaymentQueue.price}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>สถานะ:</span>
+                  <Badge className="bg-yellow-500 hover:bg-yellow-600">
+                    รอเจ้าหน้าที่ตรวจสอบ
+                  </Badge>
+                </div>
+              </div>
+              
+              <div className="mt-4 p-3 bg-yellow-100 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  📄 สลิปการโอนเงินของคุณอยู่ในระหว่างการตรวจสอบ
+                  <br />
+                  ⏰ โดยทั่วไปใช้เวลา 2-3 นาที
+                  <br />
+                  ✅ หลังได้รับการอนุมัติจะได้รับหมายเลขตู้ล็อกเกอร์
+                </p>
+              </div>
+
+              <Button 
+                onClick={() => navigate('/dashboard')}
+                className="w-full mt-4"
+                variant="outline"
+              >
+                กลับหน้าหลัก
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   if (!activeQueue) {
     return (
@@ -102,7 +168,6 @@ const UploadSlip = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-md mx-auto space-y-4">
-        {/* Header */}
         <div className="flex items-center space-x-3">
           <Button 
             variant="ghost" 
@@ -114,7 +179,6 @@ const UploadSlip = () => {
           <h1 className="text-xl font-semibold">แจ้งโอน/อัปโหลดสลิป</h1>
         </div>
 
-        {/* Queue Info */}
         <Card className="border-green-200 bg-green-50">
           <CardHeader>
             <CardTitle className="text-lg text-green-700 flex items-center space-x-2">
@@ -148,7 +212,6 @@ const UploadSlip = () => {
           </CardContent>
         </Card>
 
-        {/* Payment Instructions */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">วิธีการชำระเงิน</CardTitle>
@@ -175,7 +238,6 @@ const UploadSlip = () => {
           </CardContent>
         </Card>
 
-        {/* Upload Form */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">อัปโหลดสลิปการโอนเงิน</CardTitle>
@@ -221,7 +283,6 @@ const UploadSlip = () => {
           </CardContent>
         </Card>
 
-        {/* Customer Info */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">ข้อมูลการติดต่อ</CardTitle>

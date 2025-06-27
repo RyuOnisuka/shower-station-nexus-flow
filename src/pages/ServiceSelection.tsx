@@ -18,10 +18,8 @@ const ServiceSelection = () => {
   const navigate = useNavigate();
   const createQueueMutation = useCreateQueue();
 
-  // Get user data from localStorage (from registration/login)
   const userData = JSON.parse(localStorage.getItem('userData') || '{}');
   
-  // Generate available booking times based on current time
   useEffect(() => {
     if (selectedService === 'booking') {
       const generateAvailableTimes = () => {
@@ -30,13 +28,11 @@ const ServiceSelection = () => {
         const currentMinute = now.getMinutes();
         const times: string[] = [];
         
-        // Shop hours: 7:00 - 21:00
         const startHour = 7;
         const endHour = 21;
         
         for (let hour = startHour; hour < endHour; hour++) {
           for (let minute = 0; minute < 60; minute += 30) {
-            // Skip times that have already passed today
             if (hour > currentHour || (hour === currentHour && minute > currentMinute)) {
               const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
               times.push(timeString);
@@ -54,8 +50,8 @@ const ServiceSelection = () => {
   const getPriceByUserType = (userType: string): number => {
     switch (userType) {
       case 'employee': return 50;
-      case 'follower': return 70;
-      default: return 100; // general
+      case 'dependent': return 70;
+      default: return 100;
     }
   };
 
@@ -106,14 +102,15 @@ const ServiceSelection = () => {
 
       console.log('Queue created successfully:', queue);
       
+      // Store queue data for dashboard display
+      localStorage.setItem('currentQueue', JSON.stringify({
+        ...queue,
+        serviceType: selectedService,
+        bookingTime: selectedTime
+      }));
+      
       toast.success('สร้างคิวสำเร็จ!');
-      navigate('/upload-slip', { 
-        state: { 
-          queueData: queue,
-          serviceType: selectedService,
-          bookingTime: selectedTime
-        } 
-      });
+      navigate('/dashboard');
     } catch (error) {
       console.error('Queue creation error:', error);
       toast.error('เกิดข้อผิดพลาดในการสร้างคิว: ' + (error instanceof Error ? error.message : 'Unknown error'));
@@ -125,15 +122,13 @@ const ServiceSelection = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-md mx-auto space-y-6">
-        {/* Header */}
         <div className="flex items-center space-x-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <h1 className="text-xl font-bold text-gray-800">เลือกประเภทการใช้บริการ</h1>
         </div>
 
-        {/* Welcome Message */}
         <Card className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
           <CardContent className="p-6 text-center">
             <div className="mb-4">
@@ -146,7 +141,7 @@ const ServiceSelection = () => {
               <p className="text-sm text-gray-600 mt-1">
                 ประเภทสมาชิก: {
                   userData.user_type === 'employee' ? 'พนักงาน' : 
-                  userData.user_type === 'follower' ? 'ผู้ติดตาม' : 'ทั่วไป'
+                  userData.user_type === 'dependent' ? 'ผู้ติดตาม' : 'ทั่วไป'
                 }
               </p>
             </div>
@@ -156,7 +151,6 @@ const ServiceSelection = () => {
           </CardContent>
         </Card>
 
-        {/* Service Selection */}
         <Card className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
           <CardHeader>
             <CardTitle className="text-center text-gray-800">เลือกประเภทการใช้บริการ</CardTitle>
@@ -167,7 +161,6 @@ const ServiceSelection = () => {
               onValueChange={(value) => handleServiceSelect(value as 'walkin' | 'booking')}
               className="space-y-3"
             >
-              {/* Walk-in Option */}
               <div className="flex items-center space-x-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-300 transition-colors">
                 <RadioGroupItem value="walkin" id="walkin" />
                 <Label htmlFor="walkin" className="flex-1 cursor-pointer">
@@ -183,7 +176,6 @@ const ServiceSelection = () => {
                 </Label>
               </div>
 
-              {/* Booking Option */}
               <div className="flex items-center space-x-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-300 transition-colors">
                 <RadioGroupItem value="booking" id="booking" />
                 <Label htmlFor="booking" className="flex-1 cursor-pointer">
@@ -200,7 +192,6 @@ const ServiceSelection = () => {
               </div>
             </RadioGroup>
 
-            {/* Time Selection for Booking */}
             {selectedService === 'booking' && (
               <div className="mt-6 p-4 bg-blue-50 rounded-lg">
                 <Label className="text-sm font-medium text-gray-700 mb-2 block">
@@ -230,7 +221,6 @@ const ServiceSelection = () => {
               </div>
             )}
 
-            {/* Confirm Button */}
             <Button 
               onClick={handleConfirm}
               disabled={!selectedService || (selectedService === 'booking' && !selectedTime) || createQueueMutation.isPending}

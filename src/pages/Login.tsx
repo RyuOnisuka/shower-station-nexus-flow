@@ -16,11 +16,19 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate LINE Login process
     try {
       await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Store user data in localStorage for phone login
+      const userData = {
+        phone_number: phoneNumber,
+        first_name: 'ผู้ใช้',
+        last_name: 'ทั่วไป',
+        user_type: 'general'
+      };
+      localStorage.setItem('userData', JSON.stringify(userData));
+      
       toast.success('เข้าสู่ระบบสำเร็จ!');
-      // Navigate to service selection instead of dashboard
       navigate('/service-selection');
     } catch (error) {
       toast.error('เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
@@ -33,10 +41,20 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      // Simulate LINE Login process
       await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Store user data in localStorage for LINE login
+      const userData = {
+        phone_number: '0812345678',
+        first_name: 'สมาชิก',
+        last_name: 'ไลน์',
+        user_type: 'general',
+        gender: 'unspecified',
+        restroom_pref: 'male'
+      };
+      localStorage.setItem('userData', JSON.stringify(userData));
+      
       toast.success('เข้าสู่ระบบด้วย LINE สำเร็จ!');
-      // Navigate to service selection after LINE login
       navigate('/service-selection');
     } catch (error) {
       toast.error('เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย LINE');
@@ -59,7 +77,6 @@ const Login = () => {
           <p className="text-gray-600">เข้าสู่ระบบเพื่อใช้บริการ</p>
         </CardHeader>
         <CardContent>
-          {/* LINE Login Section */}
           <div className="mb-6">
             <Button 
               onClick={handleLineLogin}
@@ -73,7 +90,6 @@ const Login = () => {
             </p>
           </div>
 
-          {/* Divider */}
           <div className="relative mb-6">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
@@ -83,7 +99,6 @@ const Login = () => {
             </div>
           </div>
 
-          {/* Phone Login Form */}
           <form onSubmit={handleLogin} className="space-y-4 mb-6">
             <div>
               <Label htmlFor="phone">เบอร์โทรศัพท์</Label>
@@ -106,7 +121,6 @@ const Login = () => {
             </Button>
           </form>
           
-          {/* Registration Section */}
           <div className="text-center">
             <div className="relative mb-4">
               <div className="absolute inset-0 flex items-center">
@@ -126,7 +140,6 @@ const Login = () => {
             </Button>
           </div>
           
-          {/* LINE Rich Menu Info */}
           <div className="mt-6 p-4 bg-green-50 rounded-lg">
             <h4 className="text-sm font-medium text-green-800 mb-2">📱 LINE Rich Menu</h4>
             <div className="text-xs text-green-700 space-y-1">
