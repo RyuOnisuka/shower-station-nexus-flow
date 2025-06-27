@@ -12,17 +12,21 @@ export const generateQueueNumber = async (gender: string, serviceType: string, r
     // Get today's date in Thailand timezone (UTC+7)
     const now = new Date();
     const thailandOffset = 7 * 60; // Thailand is UTC+7
-    const thailandTime = new Date(now.getTime() + (thailandOffset * 60000));
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const thailandTime = new Date(utc + (thailandOffset * 60000));
     const today = thailandTime.toISOString().split('T')[0]; // YYYY-MM-DD format
     
     console.log('Generating queue number for:', { gender, serviceType, today, genderCode, serviceCode });
     
-    // Query today's queues using date comparison instead of timestamp
+    // Clean up old queues at start of new day
+    await cleanupOldQueues(today);
+    
+    // Query today's queues for the specific gender and service type
     const { data: todayQueues, error } = await supabase
       .from('queues')
       .select('queue_number')
-      .gte('created_at', `${today}T00:00:00+00:00`)
-      .lt('created_at', `${today}T23:59:59+00:00`)
+      .gte('created_at', `${today}T00:00:00`)
+      .lt('created_at', `${today}T23:59:59`)
       .like('queue_number', `${genderCode}${serviceCode}-%`)
       .order('queue_number', { ascending: false });
     
@@ -93,11 +97,30 @@ export const generateQueueNumber = async (gender: string, serviceType: string, r
   }
 };
 
+// Function to clean up old queues
+const cleanupOldQueues = async (today: string) => {
+  try {
+    const { error } = await supabase
+      .from('queues')
+      .delete()
+      .lt('created_at', `${today}T00:00:00`)
+      .in('status', ['waiting', 'called']);
+    
+    if (error) {
+      console.error('Error cleaning up old queues:', error);
+    } else {
+      console.log('Old queues cleaned up successfully');
+    }
+  } catch (error) {
+    console.error('Error in cleanupOldQueues:', error);
+  }
+};
+
 // Function to get price based on user type
 export const getPriceByUserType = (userType: string): number => {
   switch (userType) {
     case 'employee': return 50;
-    case 'follower': return 70;
+    case 'dependent': return 70;
     default: return 100; // general
   }
 };

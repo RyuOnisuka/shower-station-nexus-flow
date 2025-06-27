@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 
 const Login = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -17,20 +18,31 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Store user data in localStorage for phone login
-      const userData = {
-        phone_number: phoneNumber,
-        first_name: 'ผู้ใช้',
-        last_name: 'ทั่วไป',
-        user_type: 'general'
-      };
-      localStorage.setItem('userData', JSON.stringify(userData));
-      
-      toast.success('เข้าสู่ระบบสำเร็จ!');
-      navigate('/service-selection');
+      // Check if user exists in database
+      const { data: existingUser, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('phone_number', phoneNumber)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error checking user:', error);
+        toast.error('เกิดข้อผิดพลาดในการตรวจสอบข้อมูล');
+        return;
+      }
+
+      if (existingUser) {
+        // User exists, store data and navigate
+        localStorage.setItem('userData', JSON.stringify(existingUser));
+        toast.success('เข้าสู่ระบบสำเร็จ!');
+        navigate('/service-selection');
+      } else {
+        // User doesn't exist, navigate to register
+        toast.error('ไม่พบข้อมูลผู้ใช้ กรุณาลงทะเบียนก่อน');
+        navigate('/register');
+      }
     } catch (error) {
+      console.error('Login error:', error);
       toast.error('เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
     } finally {
       setIsLoading(false);
@@ -41,22 +53,44 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Simulate LINE login - in real implementation, this would use LINE API
+      const mockLineUserId = 'line_user_123';
       
-      // Store user data in localStorage for LINE login
-      const userData = {
-        phone_number: '0812345678',
-        first_name: 'สมาชิก',
-        last_name: 'ไลน์',
-        user_type: 'general',
-        gender: 'unspecified',
-        restroom_pref: 'male'
-      };
-      localStorage.setItem('userData', JSON.stringify(userData));
-      
-      toast.success('เข้าสู่ระบบด้วย LINE สำเร็จ!');
-      navigate('/service-selection');
+      // Check if LINE user exists
+      const { data: existingUser, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('line_user_id', mockLineUserId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error checking LINE user:', error);
+        toast.error('เกิดข้อผิดพลาดในการตรวจสอบข้อมูล LINE');
+        return;
+      }
+
+      if (existingUser) {
+        // User exists, store data and navigate
+        localStorage.setItem('userData', JSON.stringify(existingUser));
+        toast.success('เข้าสู่ระบบด้วย LINE สำเร็จ!');
+        navigate('/service-selection');
+      } else {
+        // New LINE user, navigate to register with LINE info
+        const lineUserData = {
+          line_user_id: mockLineUserId,
+          first_name: 'สมาชิก',
+          last_name: 'ไลน์',
+          phone_number: '',
+          gender: 'unspecified',
+          restroom_pref: 'male',
+          user_type: 'general'
+        };
+        localStorage.setItem('lineUserData', JSON.stringify(lineUserData));
+        toast.info('กรุณาลงทะเบียนข้อมูลเพิ่มเติม');
+        navigate('/register');
+      }
     } catch (error) {
+      console.error('LINE login error:', error);
       toast.error('เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย LINE');
     } finally {
       setIsLoading(false);

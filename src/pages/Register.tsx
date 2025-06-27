@@ -1,5 +1,4 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,10 +19,26 @@ const Register = () => {
     restroomPref: 'male',
     userType: 'general',
     employeeId: '',
-    guardianEmployeeId: ''
+    guardianEmployeeId: '',
+    lineUserId: ''
   });
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check if user came from LINE login
+    const lineUserData = localStorage.getItem('lineUserData');
+    if (lineUserData) {
+      const lineData = JSON.parse(lineUserData);
+      setFormData(prev => ({
+        ...prev,
+        firstName: lineData.first_name || '',
+        lastName: lineData.last_name || '',
+        lineUserId: lineData.line_user_id || ''
+      }));
+      localStorage.removeItem('lineUserData'); // Clean up
+    }
+  }, []);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => {
@@ -64,51 +79,64 @@ const Register = () => {
     }
 
     try {
-      // Save user to database if employee or dependent
-      if (formData.userType === 'employee' || formData.userType === 'dependent') {
-        const { error } = await supabase
-          .from('users')
-          .insert({
-            phone_number: formData.phoneNumber,
-            first_name: formData.firstName,
-            last_name: formData.lastName,
-            email: formData.email || null,
-            gender: formData.gender,
-            restroom_pref: formData.restroomPref,
-            user_type: formData.userType,
-            employee_id: formData.employeeId || null,
-            guardian_phone: formData.guardianEmployeeId || null,
-            status: 'pending'
-          });
+      // Check if phone number already exists
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('phone_number', formData.phoneNumber)
+        .maybeSingle();
 
-        if (error) throw error;
-        toast.success('ลงทะเบียนสำเร็จ! รอการอนุมัติจากแอดมิน');
-      } else {
-        toast.success('ลงทะเบียนสำเร็จ!');
+      if (checkError) {
+        console.error('Error checking existing user:', checkError);
+        throw new Error('เกิดข้อผิดพลาดในการตรวจสอบข้อมูล');
       }
 
-      // Store user data in localStorage
+      if (existingUser) {
+        toast.error('เบอร์โทรศัพท์นี้ถูกใช้แล้ว');
+        setIsLoading(false);
+        return;
+      }
+
+      // Create new user
       const userData = {
         phone_number: formData.phoneNumber,
         first_name: formData.firstName,
         last_name: formData.lastName,
-        email: formData.email,
+        email: formData.email || null,
         gender: formData.gender,
         restroom_pref: formData.restroomPref,
         user_type: formData.userType,
-        employee_id: formData.employeeId,
-        guardian_phone: formData.guardianEmployeeId
+        employee_id: formData.employeeId || null,
+        guardian_phone: formData.guardianEmployeeId || null,
+        line_user_id: formData.lineUserId || null,
+        status: (formData.userType === 'employee' || formData.userType === 'dependent') ? 'pending' : 'active'
       };
-      localStorage.setItem('userData', JSON.stringify(userData));
+
+      const { data: newUser, error } = await supabase
+        .from('users')
+        .insert(userData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Registration error:', error);
+        throw new Error(error.message);
+      }
+
+      // Store user data in localStorage
+      localStorage.setItem('userData', JSON.stringify(newUser));
       
-      // Navigate to service selection
-      setTimeout(() => {
+      if (formData.userType === 'employee' || formData.userType === 'dependent') {
+        toast.success('ลงทะเบียนสำเร็จ! รอการอนุมัติจากแอดมิน');
+        navigate('/login'); // Redirect to login for pending approval
+      } else {
+        toast.success('ลงทะเบียนสำเร็จ!');
         navigate('/service-selection');
-      }, 1000);
+      }
       
     } catch (error) {
       console.error('Registration error:', error);
-      toast.error('เกิดข้อผิดพลาดในการลงทะเบียน');
+      toast.error(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการลงทะเบียน');
     } finally {
       setIsLoading(false);
     }

@@ -21,6 +21,12 @@ const ServiceSelection = () => {
   const userData = JSON.parse(localStorage.getItem('userData') || '{}');
   
   useEffect(() => {
+    if (!userData.phone_number || !userData.first_name || !userData.last_name) {
+      toast.error('ข้อมูลผู้ใช้ไม่ครบถ้วน กรุณาลงทะเบียนใหม่');
+      navigate('/register');
+      return;
+    }
+
     if (selectedService === 'booking') {
       const generateAvailableTimes = () => {
         const now = new Date();
@@ -45,7 +51,7 @@ const ServiceSelection = () => {
       
       setAvailableTimes(generateAvailableTimes());
     }
-  }, [selectedService]);
+  }, [selectedService, userData, navigate]);
 
   const getPriceByUserType = (userType: string): number => {
     switch (userType) {
@@ -55,18 +61,20 @@ const ServiceSelection = () => {
     }
   };
 
+  const getUserTypeDisplay = (userType: string): string => {
+    switch (userType) {
+      case 'employee': return 'พนักงาน';
+      case 'dependent': return 'ผู้ติดตาม';
+      default: return 'ทั่วไป';
+    }
+  };
+
   const handleServiceSelect = (service: 'walkin' | 'booking') => {
     setSelectedService(service);
     setSelectedTime('');
   };
 
   const handleConfirm = async () => {
-    if (!userData.phone_number || !userData.first_name || !userData.last_name) {
-      toast.error('ข้อมูลผู้ใช้ไม่ครบถ้วน กรุณาลงทะเบียนใหม่');
-      navigate('/register');
-      return;
-    }
-
     if (!selectedService) {
       toast.error('กรุณาเลือกประเภทการใช้บริการ');
       return;
@@ -82,7 +90,7 @@ const ServiceSelection = () => {
         phone_number: userData.phone_number,
         first_name: userData.first_name,
         last_name: userData.last_name,
-        gender: userData.gender || 'unspecified',
+        gender: userData.gender || 'male',
         restroom_pref: userData.restroom_pref || 'male',
         service_type: selectedService,
         user_type: userData.user_type || 'general',
@@ -93,7 +101,7 @@ const ServiceSelection = () => {
         phone_number: userData.phone_number,
         first_name: userData.first_name,
         last_name: userData.last_name,
-        gender: userData.gender || 'unspecified',
+        gender: userData.gender || 'male',
         restroom_pref: userData.restroom_pref || 'male',
         service_type: selectedService,
         user_type: userData.user_type || 'general',
@@ -139,10 +147,7 @@ const ServiceSelection = () => {
                 สวัสดี คุณ{userData.first_name} {userData.last_name}
               </h2>
               <p className="text-sm text-gray-600 mt-1">
-                ประเภทสมาชิก: {
-                  userData.user_type === 'employee' ? 'พนักงาน' : 
-                  userData.user_type === 'dependent' ? 'ผู้ติดตาม' : 'ทั่วไป'
-                }
+                ประเภทสมาชิก: {getUserTypeDisplay(userData.user_type)}
               </p>
             </div>
             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
