@@ -1,9 +1,9 @@
-
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, User, Phone } from 'lucide-react';
+import { Clock, User, Phone, Droplets, Toilet } from 'lucide-react';
 import { QueueTimeTracker } from '@/components/QueueTimeTracker';
+import { getQueueDisplayName } from '@/utils/queueUtils';
 import type { Database } from '@/integrations/supabase/types';
 
 type Queue = Database['public']['Tables']['queues']['Row'] & {
@@ -45,14 +45,36 @@ export const QueueItem = ({
     }
   };
 
+  const getServiceIcon = (serviceType: string) => {
+    switch (serviceType) {
+      case 'shower': return <Droplets className="h-4 w-4 text-blue-600" />;
+      case 'toilet': return <Toilet className="h-4 w-4 text-green-600" />;
+      default: return <Droplets className="h-4 w-4 text-blue-600" />;
+    }
+  };
+
+  const getServiceText = (serviceType: string) => {
+    switch (serviceType) {
+      case 'shower': return 'อาบน้ำ';
+      case 'toilet': return 'ห้องน้ำ';
+      default: return 'อาบน้ำ';
+    }
+  };
+
   return (
     <Card className="mb-4">
       <CardContent className="p-4">
         <div className="flex justify-between items-start mb-3">
           <div>
-            <h3 className="text-lg font-semibold text-blue-600">
-              {queue.queue_number}
-            </h3>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-lg font-semibold text-blue-600">
+                {queue.queue_number}
+              </h3>
+              {getServiceIcon(queue.service_type)}
+            </div>
+            <div className="text-sm text-gray-600 mb-1">
+              {getQueueDisplayName(queue.queue_number)}
+            </div>
             <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
               <User className="h-4 w-4" />
               {queue.user?.first_name} {queue.user?.last_name}
@@ -65,6 +87,9 @@ export const QueueItem = ({
           <div className="flex flex-col gap-2 items-end">
             <Badge className={getStatusColor(queue.status)}>
               {getStatusText(queue.status)}
+            </Badge>
+            <Badge variant="outline" className="text-xs">
+              {getServiceText(queue.service_type)}
             </Badge>
             {queue.locker_number && (
               <Badge variant="outline">

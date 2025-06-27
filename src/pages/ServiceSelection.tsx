@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,13 +7,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, Users, Zap } from 'lucide-react';
+import { ArrowLeft, Droplets, Toilet, Users } from 'lucide-react';
 import { useCreateQueue } from '@/hooks/useDatabase';
 
 const ServiceSelection = () => {
-  const [selectedService, setSelectedService] = useState<'walkin' | 'booking' | null>(null);
+  const [selectedService, setSelectedService] = useState<'shower' | 'toilet' | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+  const [isBooking, setIsBooking] = useState(false);
   const navigate = useNavigate();
   const createQueueMutation = useCreateQueue();
 
@@ -27,7 +27,7 @@ const ServiceSelection = () => {
       return;
     }
 
-    if (selectedService === 'booking') {
+    if (isBooking) {
       const generateAvailableTimes = () => {
         const now = new Date();
         const currentHour = now.getHours();
@@ -51,7 +51,7 @@ const ServiceSelection = () => {
       
       setAvailableTimes(generateAvailableTimes());
     }
-  }, [selectedService, userData, navigate]);
+  }, [isBooking, userData, navigate]);
 
   const getPriceByUserType = (userType: string): number => {
     switch (userType) {
@@ -69,18 +69,18 @@ const ServiceSelection = () => {
     }
   };
 
-  const handleServiceSelect = (service: 'walkin' | 'booking') => {
+  const handleServiceSelect = (service: 'shower' | 'toilet') => {
     setSelectedService(service);
     setSelectedTime('');
   };
 
   const handleConfirm = async () => {
     if (!selectedService) {
-      toast.error('กรุณาเลือกประเภทการใช้บริการ');
+      toast.error('กรุณาเลือกประเภทบริการ');
       return;
     }
 
-    if (selectedService === 'booking' && !selectedTime) {
+    if (isBooking && !selectedTime) {
       toast.error('กรุณาเลือกเวลาที่ต้องการจอง');
       return;
     }
@@ -94,7 +94,7 @@ const ServiceSelection = () => {
         restroom_pref: userData.restroom_pref || 'male',
         service_type: selectedService,
         user_type: userData.user_type || 'general',
-        booking_time: selectedService === 'booking' ? selectedTime : undefined
+        booking_time: isBooking ? selectedTime : undefined
       });
 
       const queue = await createQueueMutation.mutateAsync({
@@ -105,7 +105,7 @@ const ServiceSelection = () => {
         restroom_pref: userData.restroom_pref || 'male',
         service_type: selectedService,
         user_type: userData.user_type || 'general',
-        booking_time: selectedService === 'booking' ? selectedTime : undefined
+        booking_time: isBooking ? selectedTime : undefined
       });
 
       console.log('Queue created successfully:', queue);
@@ -134,7 +134,7 @@ const ServiceSelection = () => {
           <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="text-xl font-bold text-gray-800">เลือกประเภทการใช้บริการ</h1>
+          <h1 className="text-xl font-bold text-gray-800">เลือกประเภทบริการ</h1>
         </div>
 
         <Card className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
@@ -158,80 +158,85 @@ const ServiceSelection = () => {
 
         <Card className="bg-white/70 backdrop-blur-sm border-0 shadow-lg">
           <CardHeader>
-            <CardTitle className="text-center text-gray-800">เลือกประเภทการใช้บริการ</CardTitle>
+            <CardTitle className="text-center text-gray-800">เลือกประเภทบริการ</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <RadioGroup 
               value={selectedService || ''} 
-              onValueChange={(value) => handleServiceSelect(value as 'walkin' | 'booking')}
+              onValueChange={(value) => handleServiceSelect(value as 'shower' | 'toilet')}
               className="space-y-3"
             >
               <div className="flex items-center space-x-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-300 transition-colors">
-                <RadioGroupItem value="walkin" id="walkin" />
-                <Label htmlFor="walkin" className="flex-1 cursor-pointer">
+                <RadioGroupItem value="shower" id="shower" />
+                <Label htmlFor="shower" className="flex-1 cursor-pointer">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                      <Zap className="h-5 w-5 text-orange-600" />
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <Droplets className="h-5 w-5 text-blue-600" />
                     </div>
                     <div>
-                      <div className="font-medium text-gray-800">Walk-in</div>
-                      <div className="text-sm text-gray-600">เข้าใช้บริการทันที</div>
+                      <div className="font-medium text-gray-800">อาบน้ำ</div>
+                      <div className="text-sm text-gray-600">บริการอาบน้ำ</div>
                     </div>
                   </div>
                 </Label>
               </div>
 
               <div className="flex items-center space-x-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-300 transition-colors">
-                <RadioGroupItem value="booking" id="booking" />
-                <Label htmlFor="booking" className="flex-1 cursor-pointer">
+                <RadioGroupItem value="toilet" id="toilet" />
+                <Label htmlFor="toilet" className="flex-1 cursor-pointer">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                      <Clock className="h-5 w-5 text-blue-600" />
+                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                      <Toilet className="h-5 w-5 text-green-600" />
                     </div>
                     <div>
-                      <div className="font-medium text-gray-800">Booking</div>
-                      <div className="text-sm text-gray-600">จองเวลาล่วงหน้า</div>
+                      <div className="font-medium text-gray-800">ห้องน้ำ</div>
+                      <div className="text-sm text-gray-600">บริการห้องน้ำ</div>
                     </div>
                   </div>
                 </Label>
               </div>
             </RadioGroup>
 
-            {selectedService === 'booking' && (
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                  เลือกเวลาที่ต้องการจอง
+            {/* Booking Option */}
+            <div className="pt-4 border-t">
+              <div className="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  id="booking"
+                  checked={isBooking}
+                  onChange={(e) => setIsBooking(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="booking" className="text-sm text-gray-700">
+                  จองเวลาล่วงหน้า (ไม่บังคับ)
                 </Label>
+              </div>
+            </div>
+
+            {isBooking && (
+              <div className="space-y-2">
+                <Label htmlFor="booking-time">เลือกเวลา</Label>
                 <Select value={selectedTime} onValueChange={setSelectedTime}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="เลือกเวลา" />
+                  <SelectTrigger>
+                    <SelectValue placeholder="เลือกเวลาที่ต้องการ" />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableTimes.length > 0 ? (
-                      availableTimes.map((time) => (
-                        <SelectItem key={time} value={time}>
-                          {time} น.
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-times" disabled>
-                        ไม่มีช่วงเวลาที่สามารถจองได้วันนี้
+                    {availableTimes.map((time) => (
+                      <SelectItem key={time} value={time}>
+                        {time}
                       </SelectItem>
-                    )}
+                    ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500 mt-2">
-                  เวลาทำการ: 07:00 - 21:00 น.
-                </p>
               </div>
             )}
 
             <Button 
               onClick={handleConfirm}
-              disabled={!selectedService || (selectedService === 'booking' && !selectedTime) || createQueueMutation.isPending}
-              className="w-full mt-6 bg-blue-600 hover:bg-blue-700"
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              disabled={createQueueMutation.isPending}
             >
-              {createQueueMutation.isPending ? 'กำลังสร้างคิว...' : 'ยืนยันการเลือก'}
+              {createQueueMutation.isPending ? 'กำลังสร้างคิว...' : 'สร้างคิว'}
             </Button>
           </CardContent>
         </Card>

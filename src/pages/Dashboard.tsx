@@ -1,12 +1,12 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, MapPin, CreditCard, History } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, CreditCard, History, Droplets, Toilet } from 'lucide-react';
 import { useQueues } from '@/hooks/useDatabase';
+import { getQueueDisplayName } from '@/utils/queueUtils';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -47,6 +47,22 @@ const Dashboard = () => {
       case 'processing': return 'bg-blue-500';
       case 'completed': return 'bg-gray-500';
       default: return 'bg-gray-500';
+    }
+  };
+
+  const getServiceIcon = (serviceType: string) => {
+    switch (serviceType) {
+      case 'shower': return <Droplets className="h-5 w-5 text-blue-600" />;
+      case 'toilet': return <Toilet className="h-5 w-5 text-green-600" />;
+      default: return <Droplets className="h-5 w-5 text-blue-600" />;
+    }
+  };
+
+  const getServiceText = (serviceType: string) => {
+    switch (serviceType) {
+      case 'shower': return 'อาบน้ำ';
+      case 'toilet': return 'ห้องน้ำ';
+      default: return 'อาบน้ำ';
     }
   };
 
@@ -105,6 +121,12 @@ const Dashboard = () => {
                 <div className="text-4xl font-bold text-blue-600 mb-2">
                   {currentQueue.queue_number}
                 </div>
+                <div className="flex items-center justify-center space-x-2 mb-2">
+                  {getServiceIcon(currentQueue.service_type)}
+                  <span className="text-sm text-gray-600">
+                    {getQueueDisplayName(currentQueue.queue_number)}
+                  </span>
+                </div>
                 <Badge className={`${getStatusColor(currentQueue.status)} hover:${getStatusColor(currentQueue.status)}`}>
                   {getStatusText(currentQueue.status)}
                 </Badge>
@@ -113,9 +135,12 @@ const Dashboard = () => {
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">ประเภทบริการ:</span>
-                  <span className="font-medium">
-                    {currentQueue.serviceType === 'booking' ? 'จองล่วงหน้า' : 'Walk-in'}
-                  </span>
+                  <div className="flex items-center space-x-1">
+                    {getServiceIcon(currentQueue.service_type)}
+                    <span className="font-medium">
+                      {getServiceText(currentQueue.service_type)}
+                    </span>
+                  </div>
                 </div>
 
                 {currentQueue.booking_time && (
@@ -198,29 +223,19 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             <Button 
-              variant="outline" 
-              className="w-full justify-start"
               onClick={() => navigate('/service-selection')}
+              className="w-full bg-blue-600 hover:bg-blue-700"
             >
-              <Clock className="h-4 w-4 mr-2" />
               สร้างคิวใหม่
             </Button>
             
             <Button 
-              variant="outline" 
-              className="w-full justify-start"
               onClick={() => navigate('/history')}
+              variant="outline"
+              className="w-full"
             >
               <History className="h-4 w-4 mr-2" />
-              ประวัติการใช้บริการ
-            </Button>
-
-            <Button 
-              variant="outline" 
-              className="w-full justify-start"
-              onClick={() => navigate('/admin')}
-            >
-              🔧 หน้าแอดมิน
+              ประวัติการใช้งาน
             </Button>
           </CardContent>
         </Card>

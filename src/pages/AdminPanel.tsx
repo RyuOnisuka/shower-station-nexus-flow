@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft, RefreshCw, RotateCcw } from 'lucide-react';
 import { 
   useQueues, 
   useLockers, 
@@ -14,6 +14,7 @@ import {
   useRejectUser
 } from '@/hooks/useDatabase';
 import { supabase } from '@/integrations/supabase/client';
+import { manualDailyReset } from '@/utils/dailyReset';
 import { QueueManagementTab } from '@/components/admin/QueueManagementTab';
 import { PaymentManagementTab } from '@/components/admin/PaymentManagementTab';
 import { LockerManagementTab } from '@/components/admin/LockerManagementTab';
@@ -22,6 +23,7 @@ import { UserApprovalTab } from '@/components/admin/UserApprovalTab';
 
 const AdminPanel = () => {
   const navigate = useNavigate();
+  const [isResetting, setIsResetting] = useState(false);
   
   const { data: queues, isLoading: queuesLoading, refetch: refetchQueues } = useQueues();
   const { data: lockers, isLoading: lockersLoading } = useLockers();
@@ -115,6 +117,27 @@ const AdminPanel = () => {
     }
   };
 
+  const handleDailyReset = async () => {
+    if (!confirm('คุณแน่ใจหรือไม่ที่จะทำ Daily Reset? การดำเนินการนี้จะลบคิวค้างทั้งหมดและรีเซ็ตระบบ')) {
+      return;
+    }
+    
+    setIsResetting(true);
+    try {
+      const result = await manualDailyReset();
+      if (result.success) {
+        toast.success(result.message);
+        await refetchQueues();
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      toast.error('เกิดข้อผิดพลาดในการทำ Daily Reset');
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   const activeQueues = queues?.filter(q => 
     ['waiting', 'called', 'processing'].includes(q.status)
   ) || [];
@@ -142,10 +165,21 @@ const AdminPanel = () => {
             </Button>
             <h1 className="text-2xl font-bold">Admin Panel</h1>
           </div>
-          <Button onClick={() => refetchQueues()} variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            รีเฟรช
-          </Button>
+          <div className="flex space-x-2">
+            <Button onClick={() => refetchQueues()} variant="outline" size="sm">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              รีเฟรช
+            </Button>
+            <Button 
+              onClick={handleDailyReset} 
+              variant="destructive" 
+              size="sm"
+              disabled={isResetting}
+            >
+              <RotateCcw className={`h-4 w-4 mr-2 ${isResetting ? 'animate-spin' : ''}`} />
+              {isResetting ? 'กำลังรีเซ็ต...' : 'Daily Reset'}
+            </Button>
+          </div>
         </div>
 
         <Tabs defaultValue="queues" className="space-y-4">

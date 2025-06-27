@@ -1,4 +1,3 @@
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { generateQueueNumber, getPriceByUserType } from '@/utils/queueUtils';
@@ -95,7 +94,7 @@ export const useCreateQueue = () => {
           // Generate queue number with retry built-in
           const queueNumber = await generateQueueNumber(
             user.gender || 'male', 
-            userData.service_type || 'walkin'
+            userData.service_type || 'shower'
           );
           
           console.log('Generated queue number:', queueNumber);
@@ -107,12 +106,12 @@ export const useCreateQueue = () => {
           const queueData: any = {
             queue_number: queueNumber,
             user_id: user.id,
-            service_type: 'shower', // Always use 'shower' for database constraint
+            service_type: userData.service_type || 'shower',
             price: price
           };
 
           // Add booking time if provided
-          if (userData.booking_time && userData.service_type === 'booking') {
+          if (userData.booking_time) {
             const today = new Date().toISOString().split('T')[0];
             queueData.booking_time = `${today}T${userData.booking_time}:00+07:00`;
             console.log('Added booking time:', queueData.booking_time);
