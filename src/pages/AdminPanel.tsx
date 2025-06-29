@@ -70,13 +70,44 @@ const AdminPanel = () => {
 
   const handleCompleteService = async (queueId: string) => {
     try {
-      await updateQueueMutation.mutateAsync({
-        queueId,
-        status: 'completed'
-      });
-      
-      toast.success('บริการเสร็จสิ้น');
+      // Get queue info (for locker_number)
+      const { data: queue } = await supabase
+        .from('queues')
+        .select('*')
+        .eq('id', queueId)
+        .single();
+
+      if (!queue || !queue.locker_number) {
+        toast.error('ไม่พบข้อมูลคิวหรือหมายเลขตู้ล็อกเกอร์');
+        return;
+      }
+
+      // Update queue status to completed and set completed_at
+      const { error: queueError } = await supabase
+        .from('queues')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', queueId);
+      if (queueError) throw queueError;
+
+      // Update locker: set available, released_at, clear user_id/current_queue_id
+      const { error: lockerError } = await supabase
+        .from('lockers')
+        .update({
+          status: 'available',
+          released_at: new Date().toISOString(),
+          user_id: null,
+          current_queue_id: null
+        })
+        .eq('locker_number', queue.locker_number);
+      if (lockerError) throw lockerError;
+
+      await refetchQueues();
+      toast.success('คืนตู้ล็อกเกอร์และจบการใช้บริการสำเร็จ');
     } catch (error) {
+      console.error('Complete service error:', error);
       toast.error('เกิดข้อผิดพลาด');
     }
   };
@@ -109,39 +140,45 @@ const AdminPanel = () => {
 
       // Determine gender for locker assignment
       let gender = 'unisex';
-      if (queue.user?.gender) {
-        gender = queue.user.gender;
-      } else if (queue.service_type === 'toilet') {
-        gender = queue.user?.restroom_pref || 'unisex';
+      if (queue.user?.gender === 'male') {
+        gender = 'male';
+      } else if (queue.user?.gender === 'female') {
+        gender = 'female';
+      } else if (queue.user?.restroom_pref === 'male') {
+        gender = 'male';
+      } else if (queue.user?.restroom_pref === 'female') {
+        gender = 'female';
       }
 
-      // Generate locker number based on gender
-      const genderPrefix = gender === 'male' ? 'M' : gender === 'female' ? 'W' : 'U';
-      const servicePrefix = queue.service_type === 'shower' ? 'S' : 'T';
-      
-      // Find available locker with gender prefix
+      // Find available locker by gender (ML = male, FL = female)
+      const lockerPrefix = gender === 'male' ? 'ML' : gender === 'female' ? 'FL' : null;
+      if (!lockerPrefix) {
+        toast.error('ไม่สามารถระบุประเภทตู้ล็อกเกอร์ได้');
+        return;
+      }
       const { data: availableLockers } = await supabase
         .from('lockers')
         .select('*')
         .eq('status', 'available')
-        .like('locker_number', `${genderPrefix}${servicePrefix}%`)
+        .like('locker_number', `${lockerPrefix}%`)
         .order('locker_number');
 
       if (!availableLockers || availableLockers.length === 0) {
-        toast.error('ไม่มีตู้ล็อกเกอร์ว่างสำหรับบริการนี้');
+        toast.error('ไม่มีตู้ล็อกเกอร์ว่างสำหรับประเภทนี้');
         return;
       }
 
       const selectedLocker = availableLockers[0];
 
-      // Assign locker to queue
+      // Assign locker to user/queue
       const { error: lockerError } = await supabase
         .from('lockers')
         .update({
           status: 'occupied',
           user_id: queue.user_id,
-          queue_id: queueId,
-          occupied_at: new Date().toISOString()
+          current_queue_id: queueId,
+          occupied_at: new Date().toISOString(),
+          released_at: null
         })
         .eq('id', selectedLocker.id);
 
