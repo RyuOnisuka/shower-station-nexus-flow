@@ -14,6 +14,8 @@ import UploadSlip from "./pages/UploadSlip";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import History from "./pages/History";
 import AdminPanel from "./pages/AdminPanel";
+import AdminLogin from "./pages/AdminLogin";
+import ProtectedAdminRoute from "./components/ProtectedAdminRoute";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,7 +43,12 @@ const App = () => {
             <Route path="/upload-slip" element={<UploadSlip />} />
             <Route path="/payment-success" element={<PaymentSuccess />} />
             <Route path="/history" element={<History />} />
-            <Route path="/admin" element={<AdminPanel />} />
+            <Route path="/admin-login" element={<AdminLogin />} />
+            <Route path="/admin" element={
+              <ProtectedAdminRoute requiredRole="staff">
+                <AdminPanel />
+              </ProtectedAdminRoute>
+            } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

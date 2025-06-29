@@ -4,6 +4,7 @@ export { useQueues, useCreateQueue, useUpdateQueueStatus, useAutoAssignLocker } 
 export { useLockers } from './useLockers';
 export { useDailyStats } from './useStats';
 export { useApproveUser, useRejectUser } from './useUserApproval';
+export { useAdminAuth, useAdminUsers } from './useAdminAuth';
 
 // Re-export utility functions
 export { generateQueueNumber, getPriceByUserType } from '@/utils/queueUtils';

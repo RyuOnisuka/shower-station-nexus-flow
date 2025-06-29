@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft, RefreshCw, LogOut, User, Shield, Settings, FileText, AlertTriangle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
   useQueues, 
@@ -16,12 +16,19 @@ import {
   useRejectUser,
   useAutoAssignLocker
 } from '@/hooks/useDatabase';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { createAuditLog } from '@/hooks/useAuditLogs';
 import { supabase } from '@/integrations/supabase/client';
 import { QueueManagementTab } from '@/components/admin/QueueManagementTab';
 import { PaymentManagementTab } from '@/components/admin/PaymentManagementTab';
 import { LockerManagementTab } from '@/components/admin/LockerManagementTab';
 import { StatisticsTab } from '@/components/admin/StatisticsTab';
 import { UserApprovalTab } from '@/components/admin/UserApprovalTab';
+import AdminUserManagementTab from '@/components/admin/AdminUserManagementTab';
+import SystemSettingsTab from '@/components/admin/SystemSettingsTab';
+import AuditLogsTab from '@/components/admin/AuditLogsTab';
+import SecurityDashboardTab from '@/components/admin/SecurityDashboardTab';
+import RoleBasedTab from '@/components/admin/RoleBasedTab';
 import { Badge } from '@/components/ui/badge';
 
 const AdminPanel = () => {
@@ -29,6 +36,8 @@ const AdminPanel = () => {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const defaultTab = searchParams.get('tab') || 'queues';
+  
+  const { adminUser, logout, hasPermission } = useAdminAuth();
   
   const { data: queues, isLoading: queuesLoading, refetch: refetchQueues } = useQueues();
   const { data: lockers, isLoading: lockersLoading, refetch: refetchLockers } = useLockers();
@@ -59,6 +68,17 @@ const AdminPanel = () => {
       });
       await refetchStats();
       queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
+      
+      // สร้าง audit log
+      await createAuditLog({
+        action: 'call_queue',
+        table_name: 'queues',
+        record_id: queueId,
+        new_values: { status: 'called' },
+        ip_address: '127.0.0.1', // ในระบบจริงควรดึงจาก request
+        user_agent: navigator.userAgent
+      });
+      
       toast.success('เรียกคิวสำเร็จ');
     } catch (error) {
       toast.error('เกิดข้อผิดพลาด');
@@ -74,6 +94,17 @@ const AdminPanel = () => {
       
       await refetchStats();
       queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
+      
+      // สร้าง audit log
+      await createAuditLog({
+        action: 'start_service',
+        table_name: 'queues',
+        record_id: queueId,
+        new_values: { status: 'processing' },
+        ip_address: '127.0.0.1',
+        user_agent: navigator.userAgent
+      });
+      
       toast.success('เริ่มบริการสำเร็จ');
     } catch (error) {
       toast.error('เกิดข้อผิดพลาด');
@@ -120,6 +151,21 @@ const AdminPanel = () => {
       await refetchLockers();
       await refetchStats();
       queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
+      
+      // สร้าง audit log
+      await createAuditLog({
+        action: 'complete_service',
+        table_name: 'queues',
+        record_id: queueId,
+        new_values: { 
+          status: 'completed', 
+          completed_at: new Date().toISOString(),
+          locker_number: queue.locker_number
+        },
+        ip_address: '127.0.0.1',
+        user_agent: navigator.userAgent
+      });
+      
       toast.success('คืนตู้ล็อกเกอร์และจบการใช้บริการสำเร็จ');
     } catch (error) {
       console.error('Complete service error:', error);
@@ -193,6 +239,17 @@ const AdminPanel = () => {
         await refetchLockers();
         await refetchStats();
         queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
+        
+        // สร้าง audit log
+        await createAuditLog({
+          action: 'approve_payment_no_locker',
+          table_name: 'payments',
+          record_id: queueId,
+          new_values: { status: 'approved' },
+          ip_address: '127.0.0.1',
+          user_agent: navigator.userAgent
+        });
+        
         toast.error('อนุมัติการชำระเงินแล้ว แต่ไม่มีตู้ล็อกเกอร์ว่าง กรุณารอตู้ล็อกเกอร์ว่างก่อนเริ่มบริการ');
         return;
       }
@@ -228,6 +285,21 @@ const AdminPanel = () => {
       await refetchLockers();
       await refetchStats();
       queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
+      
+      // สร้าง audit log
+      await createAuditLog({
+        action: 'approve_payment_assign_locker',
+        table_name: 'payments',
+        record_id: queueId,
+        new_values: { 
+          status: 'approved',
+          locker_number: selectedLocker.locker_number,
+          queue_status: 'processing'
+        },
+        ip_address: '127.0.0.1',
+        user_agent: navigator.userAgent
+      });
+      
       toast.success('อนุมัติการชำระเงินและมอบหมายตู้ล็อกเกอร์สำเร็จ');
     } catch (error) {
       console.error('Payment approval error:', error);
@@ -238,6 +310,17 @@ const AdminPanel = () => {
   const handleApproveUser = async (userId: string) => {
     try {
       await approveUserMutation.mutateAsync(userId);
+      
+      // สร้าง audit log
+      await createAuditLog({
+        action: 'approve_user',
+        table_name: 'users',
+        record_id: userId,
+        new_values: { status: 'active' },
+        ip_address: '127.0.0.1',
+        user_agent: navigator.userAgent
+      });
+      
       toast.success('อนุมัติสมาชิกสำเร็จ');
     } catch (error) {
       toast.error('เกิดข้อผิดพลาด');
@@ -247,6 +330,17 @@ const AdminPanel = () => {
   const handleRejectUser = async (userId: string) => {
     try {
       await rejectUserMutation.mutateAsync(userId);
+      
+      // สร้าง audit log
+      await createAuditLog({
+        action: 'reject_user',
+        table_name: 'users',
+        record_id: userId,
+        new_values: { status: 'rejected' },
+        ip_address: '127.0.0.1',
+        user_agent: navigator.userAgent
+      });
+      
       toast.success('ปฏิเสธสมาชิกสำเร็จ');
     } catch (error) {
       toast.error('เกิดข้อผิดพลาด');
@@ -256,6 +350,18 @@ const AdminPanel = () => {
   const handleAutoAssignLocker = async () => {
     try {
       const result = await autoAssignLockerMutation.mutateAsync();
+      
+      // สร้าง audit log
+      await createAuditLog({
+        action: 'auto_assign_locker',
+        table_name: 'lockers',
+        new_values: { 
+          assigned_count: result.assigned,
+          results: result.results
+        },
+        ip_address: '127.0.0.1',
+        user_agent: navigator.userAgent
+      });
       
       if (result.assigned > 0) {
         toast.success(result.message);
@@ -269,6 +375,26 @@ const AdminPanel = () => {
     } catch (error) {
       console.error('Auto assign locker error:', error);
       toast.error('เกิดข้อผิดพลาดในการมอบหมาย locker อัตโนมัติ');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      
+      // สร้าง audit log
+      await createAuditLog({
+        action: 'admin_logout',
+        table_name: 'admin_sessions',
+        new_values: { admin_user: adminUser?.username },
+        ip_address: '127.0.0.1',
+        user_agent: navigator.userAgent
+      });
+      
+      toast.success('ออกจากระบบสำเร็จ');
+      navigate('/admin-login');
+    } catch (error) {
+      toast.error('เกิดข้อผิดพลาดในการออกจากระบบ');
     }
   };
 
@@ -313,26 +439,51 @@ const AdminPanel = () => {
             </div>
             <h1 className="text-2xl font-bold text-[#BFA14A] ml-4">Admin Panel</h1>
           </div>
-          <div className="flex space-x-2">
-            <button
-              onClick={handleAutoAssignLocker}
-              disabled={autoAssignLockerMutation.isPending}
-              className="border border-green-600 text-green-600 rounded-md px-3 py-1 font-semibold hover:bg-green-600 hover:text-white transition disabled:opacity-50"
-            >
-              {autoAssignLockerMutation.isPending ? 'กำลังมอบหมาย...' : 'Auto Assign Locker'}
-            </button>
-            <button
-              onClick={() => refetchQueues()}
-              className="border border-[#BFA14A] text-[#BFA14A] rounded-md px-3 py-1 font-semibold hover:bg-[#BFA14A] hover:text-white transition"
-            >
-              <RefreshCw className="h-4 w-4 mr-2 inline-block" />
-              รีเฟรช
-            </button>
+          <div className="flex items-center space-x-4">
+            {/* Admin User Info */}
+            {adminUser && (
+              <div className="flex items-center space-x-2 bg-white px-3 py-2 rounded-lg shadow-sm">
+                <User className="h-4 w-4 text-[#BFA14A]" />
+                <div className="text-sm">
+                  <span className="font-medium text-gray-700">{adminUser.username}</span>
+                  <span className="text-gray-500 ml-2">
+                    ({adminUser.role === 'super_admin' ? 'Super Admin' : 
+                      adminUser.role === 'admin' ? 'Admin' : 'Staff'})
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            <div className="flex space-x-2">
+              <RoleBasedTab requiredRole="admin">
+                <button
+                  onClick={handleAutoAssignLocker}
+                  disabled={autoAssignLockerMutation.isPending}
+                  className="border border-green-600 text-green-600 rounded-md px-3 py-1 font-semibold hover:bg-green-600 hover:text-white transition disabled:opacity-50"
+                >
+                  {autoAssignLockerMutation.isPending ? 'กำลังมอบหมาย...' : 'Auto Assign Locker'}
+                </button>
+              </RoleBasedTab>
+              <button
+                onClick={() => refetchQueues()}
+                className="border border-[#BFA14A] text-[#BFA14A] rounded-md px-3 py-1 font-semibold hover:bg-[#BFA14A] hover:text-white transition"
+              >
+                <RefreshCw className="h-4 w-4 mr-2 inline-block" />
+                รีเฟรช
+              </button>
+              <button
+                onClick={handleLogout}
+                className="border border-red-600 text-red-600 rounded-md px-3 py-1 font-semibold hover:bg-red-600 hover:text-white transition flex items-center"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                ออกจากระบบ
+              </button>
+            </div>
           </div>
         </div>
 
         <Tabs defaultValue={defaultTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 rounded-xl bg-[#F3EAD6]">
+          <TabsList className="grid w-full grid-cols-9 rounded-xl bg-[#F3EAD6]">
             <TabsTrigger value="queues" className="text-[#BFA14A] flex items-center gap-1">
               จัดการคิว
               {queueCount > 0 && <Badge variant="secondary">{queueCount}</Badge>}
@@ -347,6 +498,30 @@ const AdminPanel = () => {
             </TabsTrigger>
             <TabsTrigger value="lockers" className="text-[#BFA14A]">ตู้ล็อกเกอร์</TabsTrigger>
             <TabsTrigger value="stats" className="text-[#BFA14A]">สถิติ</TabsTrigger>
+            <RoleBasedTab requiredRole="admin">
+              <TabsTrigger value="security" className="text-[#BFA14A] flex items-center gap-1">
+                <AlertTriangle className="h-4 w-4" />
+                Security
+              </TabsTrigger>
+            </RoleBasedTab>
+            <RoleBasedTab requiredRole="admin">
+              <TabsTrigger value="audit-logs" className="text-[#BFA14A] flex items-center gap-1">
+                <FileText className="h-4 w-4" />
+                Audit Logs
+              </TabsTrigger>
+            </RoleBasedTab>
+            <RoleBasedTab requiredRole="super_admin">
+              <TabsTrigger value="admin-users" className="text-[#BFA14A] flex items-center gap-1">
+                <Shield className="h-4 w-4" />
+                จัดการแอดมิน
+              </TabsTrigger>
+            </RoleBasedTab>
+            <RoleBasedTab requiredRole="super_admin">
+              <TabsTrigger value="settings" className="text-[#BFA14A] flex items-center gap-1">
+                <Settings className="h-4 w-4" />
+                การตั้งค่า
+              </TabsTrigger>
+            </RoleBasedTab>
           </TabsList>
 
           <TabsContent value="queues">
@@ -384,6 +559,30 @@ const AdminPanel = () => {
           <TabsContent value="stats">
             <StatisticsTab dailyStats={dailyStats || []} />
           </TabsContent>
+
+          <RoleBasedTab requiredRole="admin">
+            <TabsContent value="security">
+              <SecurityDashboardTab />
+            </TabsContent>
+          </RoleBasedTab>
+
+          <RoleBasedTab requiredRole="admin">
+            <TabsContent value="audit-logs">
+              <AuditLogsTab />
+            </TabsContent>
+          </RoleBasedTab>
+
+          <RoleBasedTab requiredRole="super_admin">
+            <TabsContent value="admin-users">
+              <AdminUserManagementTab />
+            </TabsContent>
+          </RoleBasedTab>
+
+          <RoleBasedTab requiredRole="super_admin">
+            <TabsContent value="settings">
+              <SystemSettingsTab />
+            </TabsContent>
+          </RoleBasedTab>
         </Tabs>
       </div>
     </div>

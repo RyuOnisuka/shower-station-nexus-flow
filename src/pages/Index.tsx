@@ -63,7 +63,7 @@ const Index = () => {
           เริ่มใช้บริการ
         </a>
         <a
-          href="/admin"
+          href="/admin-login"
           className="px-8 py-3 rounded-full font-semibold border border-[#BFA14A] text-[#BFA14A] bg-white shadow-md"
         >
           เข้าสู่ระบบแอดมิน
