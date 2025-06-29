@@ -1,7 +1,8 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, User, Phone, Calendar, MapPin } from 'lucide-react';
+import { Clock, User, Phone, Calendar, MapPin, CreditCard } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { QueueTimeTracker } from '@/components/QueueTimeTracker';
 import { getQueueDisplayName } from '@/utils/queueUtils';
 import type { Database } from '@/integrations/supabase/types';
@@ -25,10 +26,13 @@ export const QueueItem = ({
   onCompleteService, 
   isLoading 
 }: QueueItemProps) => {
+  const navigate = useNavigate();
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'waiting': return 'bg-yellow-100 text-yellow-800';
       case 'called': return 'bg-blue-100 text-blue-800';
+      case 'payment_pending': return 'bg-orange-100 text-orange-800';
       case 'processing': return 'bg-green-100 text-green-800';
       case 'completed': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -39,6 +43,7 @@ export const QueueItem = ({
     switch (status) {
       case 'waiting': return 'รอเรียก';
       case 'called': return 'เรียกแล้ว';
+      case 'payment_pending': return 'รอตรวจสอบการชำระเงิน';
       case 'processing': return 'กำลังใช้บริการ';
       case 'completed': return 'เสร็จสิ้น';
       default: return status;
@@ -140,18 +145,16 @@ export const QueueItem = ({
               เรียกคิว
             </Button>
           )}
-          
-          {queue.status === 'called' && (
+          {queue.status === 'payment_pending' && (
             <Button
-              onClick={() => onStartService(queue.id)}
-              disabled={isLoading}
+              onClick={() => navigate('/admin?tab=payments')}
               size="sm"
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-orange-600 hover:bg-orange-700"
             >
-              เริ่มบริการ
+              <CreditCard className="h-4 w-4 mr-1" />
+              ตรวจสอบการชำระเงิน
             </Button>
           )}
-          
           {queue.status === 'processing' && (
             <Button
               onClick={() => onCompleteService(queue.id)}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +6,7 @@ import { ArrowLeft, Clock, Calendar, Users } from 'lucide-react';
 import { useQueues } from '@/hooks/useDatabase';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getPriceByUserType } from '@/utils/queueUtils';
 
 type BookingType = 'walkin' | 'booking';
 
@@ -14,6 +15,8 @@ const ServiceSelection = () => {
   const [selectedBookingType, setSelectedBookingType] = useState<BookingType | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { data: queues } = useQueues();
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [selectedBookingTime, setSelectedBookingTime] = useState<string | null>(null);
 
   const bookingTypes = [
     {
@@ -39,89 +42,144 @@ const ServiceSelection = () => {
     ).length || 0;
   };
 
-  const generateQueueNumber = (bookingType: BookingType, gender: string) => {
+  const generateQueueNumber = (bookingType: BookingType, gender: string, restroomPref: string, queues: any[]) => {
     const today = new Date().toISOString().split('T')[0];
-    const existingQueues = queues?.filter(q => 
-      (bookingType === 'walkin' ? !q.booking_time : q.booking_time) &&
-      q.created_at?.startsWith(today)
+    let genderPrefix = 'U';
+    if (gender === 'male') genderPrefix = 'M';
+    else if (gender === 'female') genderPrefix = 'F';
+    else if (restroomPref === 'male') genderPrefix = 'M';
+    else if (restroomPref === 'female') genderPrefix = 'F';
+
+    const typePrefix = bookingType === 'walkin' ? 'W' : 'B';
+    const prefix = `${genderPrefix}${typePrefix}-`;
+
+    // filter queues for today, this type, and this gender
+    const todayQueues = queues?.filter(q =>
+      q.created_at?.startsWith(today) &&
+      q.queue_number?.startsWith(prefix)
     ) || [];
 
-    const nextNumber = existingQueues.length + 1;
+    // หาเลขที่มากที่สุดในวันนี้
+    let maxNumber = 0;
+    todayQueues.forEach(q => {
+      const match = q.queue_number.match(/-(\d{3})$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNumber) maxNumber = num;
+      }
+    });
+
+    const nextNumber = maxNumber + 1;
     const formattedNumber = nextNumber.toString().padStart(3, '0');
-    
-    const genderPrefix = gender === 'male' ? 'M' : gender === 'female' ? 'W' : 'U';
-    const bookingPrefix = bookingType === 'walkin' ? 'W' : 'B';
-    
-    return `${genderPrefix}${bookingPrefix}-${formattedNumber}`;
+    return `${prefix}${formattedNumber}`;
   };
+
+  const generateTimeSlots = () => {
+    const slots = [];
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 7, 0, 0, 0); // เริ่ม 07:00
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 22, 30, 0, 0); // สิ้นสุด 22:30
+    let slot = new Date(start);
+    while (slot <= end) {
+      // แสดงเฉพาะเวลาตั้งแต่เวลาปัจจุบันขึ้นไป
+      if (slot >= now) {
+        slots.push(new Date(slot));
+      }
+      slot.setMinutes(slot.getMinutes() + 30);
+    }
+    return slots;
+  };
+
+  const timeSlots = generateTimeSlots();
 
   const handleServiceSelect = async () => {
     if (!selectedBookingType) {
       toast.error('กรุณาเลือกประเภทการจอง');
       return;
     }
-
+    if (!userProfile) {
+      toast.error('กรุณาเข้าสู่ระบบ');
+      navigate('/login');
+      return;
+    }
+    if (selectedBookingType === 'booking' && !selectedBookingTime) {
+      toast.error('กรุณาเลือกเวลาจอง');
+      return;
+    }
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error('กรุณาเข้าสู่ระบบ');
-        navigate('/login');
-        return;
+      const gender = userProfile.gender || 'unspecific';
+      const restroomPref = userProfile.restroom_pref || 'male';
+      const price = getPriceByUserType(userProfile.user_type);
+      const bookingTime = selectedBookingType === 'booking' ? selectedBookingTime : null;
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+      let genkey;
+      let queue = null;
+      let error = null;
+      let retry = 0;
+      const maxRetry = 5;
+
+      while (retry < maxRetry) {
+        genkey = generateQueueNumber(
+          selectedBookingType,
+          gender,
+          restroomPref,
+          (queues || []).filter(q => q.created_at?.startsWith(today))
+        );
+        const result = await supabase
+          .from('queues')
+          .insert({
+            user_id: userProfile.id,
+            genkey: genkey,
+            createdate: today,
+            queue_number: genkey, // สำหรับแสดงผล
+            service_type: selectedBookingType === 'walkin' ? 'Walk-in' : 'Booking',
+            price: price,
+            status: 'waiting',
+            booking_time: bookingTime
+          })
+          .select()
+          .single();
+        queue = result.data;
+        error = result.error;
+        if (!error || !String(error.message).includes('duplicate key value')) break;
+        retry++;
       }
-
-      const { data: userProfile } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (!userProfile) {
-        toast.error('ไม่พบข้อมูลผู้ใช้');
-        return;
-      }
-
-      let gender = 'unisex';
-      if (userProfile.gender) {
-        gender = userProfile.gender;
-      }
-
-      const queueNumber = generateQueueNumber(selectedBookingType, gender);
-      const price = 50;
-
-      const { data: queue, error } = await supabase
-        .from('queues')
-        .insert({
-          user_id: user.id,
-          queue_number: queueNumber,
-          service_type: 'general',
-          price: price,
-          status: 'waiting',
-          booking_time: selectedBookingType === 'booking' ? new Date().toISOString() : null
-        })
-        .select()
-        .single();
 
       if (error) {
-        toast.error('เกิดข้อผิดพลาดในการสร้างคิว');
+        toast.error('เกิดข้อผิดพลาดในการสร้างคิว: ' + error.message);
         return;
       }
-
-      toast.success(`สร้างคิวสำเร็จ: ${queueNumber}`);
-      navigate('/upload-slip', { 
-        state: { 
-          queueId: queue.id,
-          queueNumber: queueNumber,
-          price: price
-        } 
-      });
-
+      toast.success(`สร้างคิวสำเร็จ: ${genkey}`);
+      navigate('/dashboard');
     } catch (error) {
       toast.error('เกิดข้อผิดพลาด');
     } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const userData = localStorage.getItem('userData');
+    if (!userData) {
+      toast.error('กรุณาเข้าสู่ระบบ');
+      navigate('/login');
+      return;
+    }
+    setUserProfile(JSON.parse(userData));
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!userProfile || !queues) return;
+    const hasActiveQueue = queues.some(q =>
+      q.user?.phone_number === userProfile.phone_number &&
+      ['waiting', 'called', 'payment_pending', 'processing'].includes(q.status)
+    );
+    if (hasActiveQueue) {
+      navigate('/dashboard');
+    }
+  }, [userProfile, queues, navigate]);
 
   return (
     <div className="min-h-screen bg-[#FAF6EF] p-4">
@@ -181,6 +239,21 @@ const ServiceSelection = () => {
           </CardContent>
         </Card>
 
+        {/* User Profile */}
+        {userProfile && (
+          <div className="mb-4 p-4 bg-[#F3EAD6] rounded-lg flex items-center gap-4">
+            <span className="font-bold text-[#BFA14A]">
+              {userProfile.first_name} {userProfile.last_name}
+            </span>
+            <span className="text-sm text-gray-700">
+              ประเภท: {userProfile.user_type || 'ทั่วไป'}
+            </span>
+            <span className="text-sm text-gray-700">
+              เบอร์: {userProfile.phone_number}
+            </span>
+          </div>
+        )}
+
         {/* Booking Type Selection */}
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-[#BFA14A]">เลือกประเภทการจอง</h2>
@@ -205,6 +278,24 @@ const ServiceSelection = () => {
               </Card>
             ))}
           </div>
+          {selectedBookingType === 'booking' && (
+            <div className="mb-4">
+              <label className="block text-[#BFA14A] font-semibold mb-1">เลือกเวลาจอง</label>
+              <select
+                value={selectedBookingTime || ''}
+                onChange={e => setSelectedBookingTime(e.target.value)}
+                className="rounded-md border-[#BFA14A] focus:border-[#BFA14A] focus:ring-[#BFA14A] bg-[#FAF6EF] text-gray-800 px-2 py-1"
+                required
+              >
+                <option value="" disabled>-- เลือกเวลา --</option>
+                {timeSlots.map(slot => (
+                  <option key={slot.toISOString()} value={slot.toISOString()}>
+                    {slot.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <button
             onClick={handleServiceSelect}
             className="w-full border border-[#BFA14A] text-[#BFA14A] rounded-md font-semibold py-2 hover:bg-[#BFA14A] hover:text-white transition"

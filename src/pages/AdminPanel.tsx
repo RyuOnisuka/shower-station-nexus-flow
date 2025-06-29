@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
   useQueues, 
   useLockers, 
@@ -11,7 +13,8 @@ import {
   useDailyStats, 
   usePendingUsers,
   useApproveUser,
-  useRejectUser
+  useRejectUser,
+  useAutoAssignLocker
 } from '@/hooks/useDatabase';
 import { supabase } from '@/integrations/supabase/client';
 import { QueueManagementTab } from '@/components/admin/QueueManagementTab';
@@ -19,17 +22,22 @@ import { PaymentManagementTab } from '@/components/admin/PaymentManagementTab';
 import { LockerManagementTab } from '@/components/admin/LockerManagementTab';
 import { StatisticsTab } from '@/components/admin/StatisticsTab';
 import { UserApprovalTab } from '@/components/admin/UserApprovalTab';
+import { Badge } from '@/components/ui/badge';
 
 const AdminPanel = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const defaultTab = searchParams.get('tab') || 'queues';
   
   const { data: queues, isLoading: queuesLoading, refetch: refetchQueues } = useQueues();
-  const { data: lockers, isLoading: lockersLoading } = useLockers();
-  const { data: dailyStats } = useDailyStats();
+  const { data: lockers, isLoading: lockersLoading, refetch: refetchLockers } = useLockers();
+  const { data: dailyStats, refetch: refetchStats } = useDailyStats();
   const { data: pendingUsers, isLoading: pendingUsersLoading } = usePendingUsers();
   const updateQueueMutation = useUpdateQueueStatus();
   const approveUserMutation = useApproveUser();
   const rejectUserMutation = useRejectUser();
+  const autoAssignLockerMutation = useAutoAssignLocker();
 
   // Get lockers with user and queue data
   const enhancedLockers = lockers?.map(locker => {
@@ -49,6 +57,8 @@ const AdminPanel = () => {
         queueId,
         status: 'called'
       });
+      await refetchStats();
+      queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
       toast.success('เรียกคิวสำเร็จ');
     } catch (error) {
       toast.error('เกิดข้อผิดพลาด');
@@ -62,6 +72,8 @@ const AdminPanel = () => {
         status: 'processing'
       });
       
+      await refetchStats();
+      queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
       toast.success('เริ่มบริการสำเร็จ');
     } catch (error) {
       toast.error('เกิดข้อผิดพลาด');
@@ -105,6 +117,9 @@ const AdminPanel = () => {
       if (lockerError) throw lockerError;
 
       await refetchQueues();
+      await refetchLockers();
+      await refetchStats();
+      queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
       toast.success('คืนตู้ล็อกเกอร์และจบการใช้บริการสำเร็จ');
     } catch (error) {
       console.error('Complete service error:', error);
@@ -164,7 +179,21 @@ const AdminPanel = () => {
         .order('locker_number');
 
       if (!availableLockers || availableLockers.length === 0) {
-        toast.error('ไม่มีตู้ล็อกเกอร์ว่างสำหรับประเภทนี้');
+        // ไม่มี locker ว่าง - เปลี่ยนสถานะ queue กลับเป็น 'called' และแจ้งเตือน
+        const { error: queueError } = await supabase
+          .from('queues')
+          .update({
+            status: 'called'
+          })
+          .eq('id', queueId);
+
+        if (queueError) throw queueError;
+        
+        await refetchQueues();
+        await refetchLockers();
+        await refetchStats();
+        queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
+        toast.error('อนุมัติการชำระเงินแล้ว แต่ไม่มีตู้ล็อกเกอร์ว่าง กรุณารอตู้ล็อกเกอร์ว่างก่อนเริ่มบริการ');
         return;
       }
 
@@ -196,7 +225,10 @@ const AdminPanel = () => {
       if (queueError) throw queueError;
       
       await refetchQueues();
-      toast.success(`อนุมัติการชำระเงินและมอบหมายตู้ล็อกเกอร์ ${selectedLocker.locker_number} สำเร็จ`);
+      await refetchLockers();
+      await refetchStats();
+      queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
+      toast.success('อนุมัติการชำระเงินและมอบหมายตู้ล็อกเกอร์สำเร็จ');
     } catch (error) {
       console.error('Payment approval error:', error);
       toast.error('เกิดข้อผิดพลาด');
@@ -221,13 +253,36 @@ const AdminPanel = () => {
     }
   };
 
+  const handleAutoAssignLocker = async () => {
+    try {
+      const result = await autoAssignLockerMutation.mutateAsync();
+      
+      if (result.assigned > 0) {
+        toast.success(result.message);
+        // แสดงรายละเอียดการมอบหมาย
+        result.results.forEach((item: any) => {
+          toast.success(`คิว ${item.queueNumber} (${item.userName}) → ตู้ ${item.lockerNumber}`);
+        });
+      } else {
+        toast.info(result.message);
+      }
+    } catch (error) {
+      console.error('Auto assign locker error:', error);
+      toast.error('เกิดข้อผิดพลาดในการมอบหมาย locker อัตโนมัติ');
+    }
+  };
+
   const activeQueues = queues?.filter(q => 
-    ['waiting', 'called', 'processing'].includes(q.status)
+    ['waiting', 'called', 'payment_pending', 'processing'].includes(q.status)
   ) || [];
 
   const pendingPaymentQueues = queues?.filter(q => 
     q.payment && q.payment.some((p: any) => p.status === 'pending')
   ) || [];
+
+  const queueCount = activeQueues.length;
+  const paymentCount = pendingPaymentQueues.length;
+  const pendingUserCount = pendingUsers?.length || 0;
 
   if (queuesLoading || lockersLoading || pendingUsersLoading) {
     return (
@@ -258,20 +313,38 @@ const AdminPanel = () => {
             </div>
             <h1 className="text-2xl font-bold text-[#BFA14A] ml-4">Admin Panel</h1>
           </div>
-          <button
-            onClick={() => refetchQueues()}
-            className="border border-[#BFA14A] text-[#BFA14A] rounded-md px-3 py-1 font-semibold hover:bg-[#BFA14A] hover:text-white transition"
-          >
-            <RefreshCw className="h-4 w-4 mr-2 inline-block" />
-            รีเฟรช
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={handleAutoAssignLocker}
+              disabled={autoAssignLockerMutation.isPending}
+              className="border border-green-600 text-green-600 rounded-md px-3 py-1 font-semibold hover:bg-green-600 hover:text-white transition disabled:opacity-50"
+            >
+              {autoAssignLockerMutation.isPending ? 'กำลังมอบหมาย...' : 'Auto Assign Locker'}
+            </button>
+            <button
+              onClick={() => refetchQueues()}
+              className="border border-[#BFA14A] text-[#BFA14A] rounded-md px-3 py-1 font-semibold hover:bg-[#BFA14A] hover:text-white transition"
+            >
+              <RefreshCw className="h-4 w-4 mr-2 inline-block" />
+              รีเฟรช
+            </button>
+          </div>
         </div>
 
-        <Tabs defaultValue="queues" className="w-full">
+        <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList className="grid w-full grid-cols-5 rounded-xl bg-[#F3EAD6]">
-            <TabsTrigger value="queues" className="text-[#BFA14A]">จัดการคิว</TabsTrigger>
-            <TabsTrigger value="payments" className="text-[#BFA14A]">การชำระเงิน</TabsTrigger>
-            <TabsTrigger value="users" className="text-[#BFA14A]">อนุมัติสมาชิก</TabsTrigger>
+            <TabsTrigger value="queues" className="text-[#BFA14A] flex items-center gap-1">
+              จัดการคิว
+              {queueCount > 0 && <Badge variant="secondary">{queueCount}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="text-[#BFA14A] flex items-center gap-1">
+              การชำระเงิน
+              {paymentCount > 0 && <Badge variant="secondary">{paymentCount}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="users" className="text-[#BFA14A] flex items-center gap-1">
+              อนุมัติสมาชิก
+              {pendingUserCount > 0 && <Badge variant="secondary">{pendingUserCount}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="lockers" className="text-[#BFA14A]">ตู้ล็อกเกอร์</TabsTrigger>
             <TabsTrigger value="stats" className="text-[#BFA14A]">สถิติ</TabsTrigger>
           </TabsList>
@@ -279,6 +352,7 @@ const AdminPanel = () => {
           <TabsContent value="queues">
             <QueueManagementTab
               activeQueues={activeQueues}
+              lockers={enhancedLockers}
               onCallQueue={handleCallQueue}
               onStartService={handleStartService}
               onCompleteService={handleCompleteService}

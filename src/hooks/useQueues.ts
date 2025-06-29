@@ -282,3 +282,120 @@ export const useUpdateQueueStatus = () => {
     }
   });
 };
+
+// Hook สำหรับตรวจสอบและมอบหมาย locker อัตโนมัติ
+export const useAutoAssignLocker = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async () => {
+      try {
+        // หา queues ที่ชำระเงินแล้วแต่ยังไม่มี locker (status = 'called')
+        const { data: waitingQueues, error: queueError } = await supabase
+          .from('queues')
+          .select(`
+            *,
+            user:users(*),
+            payment:payments(*)
+          `)
+          .eq('status', 'called')
+          .is('locker_number', null);
+
+        if (queueError) throw queueError;
+
+        if (!waitingQueues || waitingQueues.length === 0) {
+          return { assigned: 0, message: 'ไม่มีคิวที่รอ locker' };
+        }
+
+        let assignedCount = 0;
+        const results = [];
+
+        for (const queue of waitingQueues) {
+          // ตรวจสอบว่ามีการชำระเงินที่อนุมัติแล้วหรือไม่
+          const hasApprovedPayment = queue.payment?.some((p: any) => p.status === 'approved');
+          if (!hasApprovedPayment) continue;
+
+          // กำหนดประเภท locker ตาม gender
+          let gender = 'unisex';
+          if (queue.user?.gender === 'male') {
+            gender = 'male';
+          } else if (queue.user?.gender === 'female') {
+            gender = 'female';
+          } else if (queue.user?.restroom_pref === 'male') {
+            gender = 'male';
+          } else if (queue.user?.restroom_pref === 'female') {
+            gender = 'female';
+          }
+
+          const lockerPrefix = gender === 'male' ? 'ML' : gender === 'female' ? 'FL' : null;
+          if (!lockerPrefix) continue;
+
+          // หา locker ว่าง
+          const { data: availableLockers } = await supabase
+            .from('lockers')
+            .select('*')
+            .eq('status', 'available')
+            .like('locker_number', `${lockerPrefix}%`)
+            .order('locker_number')
+            .limit(1);
+
+          if (!availableLockers || availableLockers.length === 0) continue;
+
+          const selectedLocker = availableLockers[0];
+
+          // มอบหมาย locker
+          const { error: lockerError } = await supabase
+            .from('lockers')
+            .update({
+              status: 'occupied',
+              user_id: queue.user_id,
+              current_queue_id: queue.id,
+              occupied_at: new Date().toISOString(),
+              released_at: null
+            })
+            .eq('id', selectedLocker.id);
+
+          if (lockerError) {
+            console.error('Error assigning locker:', lockerError);
+            continue;
+          }
+
+          // อัปเดต queue
+          const { error: queueUpdateError } = await supabase
+            .from('queues')
+            .update({
+              locker_number: selectedLocker.locker_number,
+              status: 'processing'
+            })
+            .eq('id', queue.id);
+
+          if (queueUpdateError) {
+            console.error('Error updating queue:', queueUpdateError);
+            continue;
+          }
+
+          assignedCount++;
+          results.push({
+            queueNumber: queue.queue_number,
+            userName: `${queue.user?.first_name} ${queue.user?.last_name}`,
+            lockerNumber: selectedLocker.locker_number
+          });
+        }
+
+        return { 
+          assigned: assignedCount, 
+          results,
+          message: assignedCount > 0 ? `มอบหมาย locker ให้ ${assignedCount} คิว` : 'ไม่มี locker ว่าง'
+        };
+      } catch (error) {
+        console.error('Auto assign locker error:', error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['queues'] });
+      queryClient.invalidateQueries({ queryKey: ['lockers'] });
+      queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
+    }
+  });
+};

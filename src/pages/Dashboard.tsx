@@ -21,7 +21,7 @@ const Dashboard = () => {
     } else {
       const userQueue = queues?.find(q => 
         q.user?.phone_number === userData.phone_number && 
-        ['waiting', 'called', 'processing'].includes(q.status)
+        ['waiting', 'called', 'payment_pending', 'processing'].includes(q.status)
       );
       setCurrentQueue(userQueue || null);
     }
@@ -31,6 +31,7 @@ const Dashboard = () => {
     switch (status) {
       case 'waiting': return 'รอเรียกคิว';
       case 'called': return 'เรียกคิวแล้ว - รอชำระเงิน';
+      case 'payment_pending': return 'รอตรวจสอบการชำระเงิน';
       case 'processing': return 'กำลังใช้บริการ';
       case 'completed': return 'ใช้บริการเสร็จสิ้น';
       default: return status;
@@ -41,6 +42,7 @@ const Dashboard = () => {
     switch (status) {
       case 'waiting': return 'bg-yellow-400 text-white';
       case 'called': return 'bg-[#BFA14A] text-white';
+      case 'payment_pending': return 'bg-orange-400 text-white';
       case 'processing': return 'bg-blue-400 text-white';
       case 'completed': return 'bg-gray-400 text-white';
       default: return 'bg-gray-400 text-white';
@@ -190,13 +192,13 @@ const Dashboard = () => {
 
               {/* Action Buttons */}
               <div className="space-y-2 pt-4">
-                {currentQueue.status === 'called' && (
+                {(currentQueue.status === 'called' || currentQueue.status === 'payment_pending') && (
                   <button
                     onClick={handlePayment}
                     className="w-full border border-[#BFA14A] text-[#BFA14A] rounded-md font-semibold py-2 hover:bg-[#BFA14A] hover:text-white transition"
                   >
                     <CreditCard className="h-4 w-4 mr-2 inline-block" />
-                    ชำระเงิน/อัปโหลดสลิป
+                    {currentQueue.status === 'called' ? 'ชำระเงิน/อัปโหลดสลิป' : 'ดูสถานะการชำระเงิน'}
                   </button>
                 )}
               </div>

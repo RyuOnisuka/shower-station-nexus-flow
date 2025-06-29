@@ -1,7 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { QueueItem } from './QueueItem';
-import { useLockers } from '@/hooks/useDatabase';
 import type { Database } from '@/integrations/supabase/types';
 
 type Queue = Database['public']['Tables']['queues']['Row'] & {
@@ -9,8 +8,14 @@ type Queue = Database['public']['Tables']['queues']['Row'] & {
   payment?: Database['public']['Tables']['payments']['Row'][];
 };
 
+type Locker = Database['public']['Tables']['lockers']['Row'] & {
+  user?: Database['public']['Tables']['users']['Row'];
+  queue?: Database['public']['Tables']['queues']['Row'];
+};
+
 interface QueueManagementTabProps {
   activeQueues: Queue[];
+  lockers: Locker[];
   onCallQueue: (queueId: string) => void;
   onStartService: (queueId: string) => void;
   onCompleteService: (queueId: string) => void;
@@ -19,13 +24,12 @@ interface QueueManagementTabProps {
 
 export const QueueManagementTab = ({ 
   activeQueues, 
+  lockers,
   onCallQueue, 
   onStartService, 
   onCompleteService, 
   isLoading 
 }: QueueManagementTabProps) => {
-  const { data: lockers } = useLockers();
-
   // Sort queues by creation time (oldest first)
   const sortedQueues = [...activeQueues].sort((a, b) => {
     const timeA = a.booking_time || a.created_at;
@@ -37,7 +41,7 @@ export const QueueManagementTab = ({
   const getLockerStatusByGender = (gender: string) => {
     if (!lockers) return { available: 0, occupied: 0 };
     
-    const genderPrefix = gender === 'male' ? 'M' : gender === 'female' ? 'W' : 'U';
+    const genderPrefix = gender === 'male' ? 'ML' : gender === 'female' ? 'FL' : 'U';
     const genderLockers = lockers.filter(locker => 
       locker.locker_number.startsWith(genderPrefix)
     );
@@ -50,7 +54,10 @@ export const QueueManagementTab = ({
 
   const maleLockers = getLockerStatusByGender('male');
   const femaleLockers = getLockerStatusByGender('female');
-  const unisexLockers = getLockerStatusByGender('unisex');
+  const totalLockers = {
+    available: lockers?.filter(l => l.status === 'available').length || 0,
+    occupied: lockers?.filter(l => l.status === 'occupied').length || 0
+  };
 
   return (
     <div className="space-y-6">
@@ -62,23 +69,23 @@ export const QueueManagementTab = ({
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 bg-blue-50 rounded-lg">
-              <div className="font-semibold text-blue-800">ชาย (M)</div>
+              <div className="font-semibold text-blue-800">ชาย (ML)</div>
               <div className="text-sm text-blue-600 mt-1">
                 ว่าง: {maleLockers.available} | ใช้งาน: {maleLockers.occupied}
               </div>
             </div>
             
             <div className="p-4 bg-pink-50 rounded-lg">
-              <div className="font-semibold text-pink-800">หญิง (W)</div>
+              <div className="font-semibold text-pink-800">หญิง (FL)</div>
               <div className="text-sm text-pink-600 mt-1">
                 ว่าง: {femaleLockers.available} | ใช้งาน: {femaleLockers.occupied}
               </div>
             </div>
             
             <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="font-semibold text-gray-800">รวม (U)</div>
+              <div className="font-semibold text-gray-800">รวมทั้งหมด</div>
               <div className="text-sm text-gray-600 mt-1">
-                ว่าง: {unisexLockers.available} | ใช้งาน: {unisexLockers.occupied}
+                ว่าง: {totalLockers.available} | ใช้งาน: {totalLockers.occupied}
               </div>
             </div>
           </div>

@@ -26,6 +26,10 @@ const Login = () => {
         return;
       }
       if (existingUser) {
+        if (existingUser.status !== 'active') {
+          toast.error('บัญชีของคุณยังไม่ได้รับการอนุมัติจากแอดมิน');
+          return;
+        }
         localStorage.setItem('userData', JSON.stringify(existingUser));
         toast.success('เข้าสู่ระบบสำเร็จ!');
         navigate('/service-selection');

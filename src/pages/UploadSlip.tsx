@@ -41,34 +41,98 @@ const UploadSlip = () => {
       toast.error('กรุณาเลือกไฟล์สลิปการโอนเงิน');
       return;
     }
-
     if (!activeQueue) {
       toast.error('ไม่พบคิวที่ต้องชำระเงิน');
       return;
     }
-
-    setIsUploading(true);
     
+    // ตรวจสอบขนาดไฟล์ (ไม่เกิน 50MB)
+    if (selectedFile.size > 50 * 1024 * 1024) {
+      toast.error('ขนาดไฟล์ต้องไม่เกิน 50MB');
+      return;
+    }
+    
+    setIsUploading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // 1. อัปโหลดไฟล์ไป storage โดยตรง
+      const fileExt = selectedFile.name.split('.').pop()?.toLowerCase();
+      const fileName = `slip_${activeQueue.queue_number}_${Date.now()}.${fileExt}`;
       
-      const { error } = await supabase
+      console.log('Uploading file:', fileName, 'Size:', selectedFile.size);
+      
+      const { data: uploadData, error: uploadError } = await supabase
+        .storage
+        .from('slips')
+        .upload(fileName, selectedFile, { 
+          upsert: true,
+          cacheControl: '3600'
+        });
+        
+      if (uploadError) {
+        console.error('Upload error details:', uploadError);
+        throw uploadError;
+      }
+
+      console.log('Upload successful:', uploadData);
+
+      // 2. สร้าง public URL
+      const { data: publicUrlData } = supabase
+        .storage
+        .from('slips')
+        .getPublicUrl(fileName);
+      const slipUrl = publicUrlData?.publicUrl;
+
+      console.log('Public URL:', slipUrl);
+
+      // 3. บันทึกลง payments
+      const { error: paymentError } = await supabase
         .from('payments')
         .insert({
           queue_id: activeQueue.id,
           amount: activeQueue.price,
           payment_method: 'transfer',
-          slip_url: `slip_${activeQueue.queue_number}_${Date.now()}.jpg`,
+          slip_url: slipUrl,
           status: 'pending'
         });
+      if (paymentError) {
+        console.error('Payment insert error:', paymentError);
+        throw paymentError;
+      }
 
-      if (error) throw error;
+      // 4. อัปเดตสถานะคิว
+      const { error: queueError } = await supabase
+        .from('queues')
+        .update({ status: 'called' })
+        .eq('id', activeQueue.id);
+        
+      if (queueError) {
+        console.error('Queue update error:', queueError);
+        throw queueError;
+      }
 
       toast.success('อัปโหลดสลิปสำเร็จ! รอตรวจสอบจากเจ้าหน้าที่');
       navigate('/dashboard');
-    } catch (error) {
-      toast.error('เกิดข้อผิดพลาดในการอัปโหลด');
+    } catch (error: any) {
       console.error('Upload error:', error);
+      
+      // แสดง error message ที่เฉพาะเจาะจง
+      let errorMessage = 'เกิดข้อผิดพลาดในการอัปโหลดสลิป';
+      
+      if (error.message) {
+        if (error.message.includes('Bucket not found')) {
+          errorMessage = 'ไม่พบ bucket "slips" กรุณาตรวจสอบการตั้งค่า Supabase Storage';
+        } else if (error.message.includes('JWT')) {
+          errorMessage = 'การเชื่อมต่อไม่ถูกต้อง กรุณาเข้าสู่ระบบใหม่';
+        } else if (error.message.includes('size')) {
+          errorMessage = 'ขนาดไฟล์ใหญ่เกินไป';
+        } else if (error.message.includes('policy')) {
+          errorMessage = 'ไม่มีสิทธิ์อัปโหลดไฟล์ กรุณาตรวจสอบ policy ของ bucket';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setIsUploading(false);
     }
@@ -209,7 +273,7 @@ const UploadSlip = () => {
               <Input
                 id="slip"
                 type="file"
-                accept="image/*"
+                accept=".png,.jpg,.jpeg,.pdf,image/*"
                 onChange={handleFileSelect}
                 className="rounded-md border-[#BFA14A] focus:border-[#BFA14A] focus:ring-[#BFA14A] bg-[#FAF6EF] text-gray-800 mt-2"
               />
