@@ -9,9 +9,11 @@ import { Eye, EyeOff, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { createAuditLog } from '@/hooks/useAuditLogs';
 import { recordLoginAttempt, checkLoginAttempts } from '@/hooks/useSecurity';
+import { useQueryClient } from '@tanstack/react-query';
 
 const AdminLogin = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { login } = useAdminAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -37,17 +39,14 @@ const AdminLogin = () => {
         return;
       }
 
+      // อัปเดต remaining attempts ก่อน
       setRemainingAttempts(loginCheck.remainingAttempts);
 
       const result = await login({ username, password });
-      
-      // บันทึก login attempt
-      await recordLoginAttempt({
-        username,
-        ip_address: '127.0.0.1',
-        user_agent: navigator.userAgent,
-        success: result.success
-      });
+
+      // Invalidate queries เพื่อให้ Security Dashboard อัปเดต
+      queryClient.invalidateQueries({ queryKey: ['login_attempts'] });
+      queryClient.invalidateQueries({ queryKey: ['security_alerts'] });
       
       if (result.success) {
         // สร้าง audit log
@@ -65,12 +64,17 @@ const AdminLogin = () => {
         toast.success('เข้าสู่ระบบสำเร็จ');
         navigate('/admin');
       } else {
-        setError(result.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
+        // ตรวจสอบ login attempts อีกครั้งหลังจาก failed login
+        const updatedLoginCheck = await checkLoginAttempts(username, '127.0.0.1');
+        setRemainingAttempts(updatedLoginCheck.remainingAttempts);
         
-        if (loginCheck.remainingAttempts <= 1) {
-          setError(`รหัสผ่านไม่ถูกต้อง บัญชีจะถูกบล็อกหลังจากพยายาม ${loginCheck.remainingAttempts} ครั้ง`);
+        if (updatedLoginCheck.blocked) {
+          setError(`รหัสผ่านไม่ถูกต้อง บัญชีถูกบล็อกชั่วคราว`);
+          setIsBlocked(true);
+        } else if (updatedLoginCheck.remainingAttempts <= 1) {
+          setError(`รหัสผ่านไม่ถูกต้อง เหลือโอกาส ${updatedLoginCheck.remainingAttempts} ครั้ง`);
         } else {
-          setError(`รหัสผ่านไม่ถูกต้อง เหลือโอกาส ${loginCheck.remainingAttempts} ครั้ง`);
+          setError(`รหัสผ่านไม่ถูกต้อง เหลือโอกาส ${updatedLoginCheck.remainingAttempts} ครั้ง`);
         }
       }
     } catch (error) {

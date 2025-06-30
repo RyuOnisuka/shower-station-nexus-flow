@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +16,8 @@ import {
   Activity,
   Lock,
   Unlock,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 import { useSecuritySettings, useLoginAttempts, useSecurityAlerts, useIPCheck } from '@/hooks/useSecurity';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
@@ -27,11 +28,33 @@ const SecurityDashboardTab: React.FC = () => {
   const [selectedAlert, setSelectedAlert] = useState<any>(null);
   const [isAlertDialogOpen, setIsAlertDialogOpen] = useState(false);
   const [selectedIP, setSelectedIP] = useState<string>('');
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   const { settings, isLoading: settingsLoading, updateSecuritySettings } = useSecuritySettings();
-  const { data: loginAttempts, isLoading: attemptsLoading } = useLoginAttempts({ limit: 50 });
-  const { data: alerts, isLoading: alertsLoading, resolveAlert } = useSecurityAlerts();
+  const { data: loginAttempts, isLoading: attemptsLoading, refetch: refetchLoginAttempts } = useLoginAttempts({ limit: 50 });
+  const { data: alerts, isLoading: alertsLoading, resolveAlert, refetch: refetchAlerts } = useSecurityAlerts();
   const { ipInfo, isLoading: ipLoading, checkIP } = useIPCheck();
+
+  // Auto refresh every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetchLoginAttempts();
+      refetchAlerts();
+      setLastRefresh(new Date());
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [refetchLoginAttempts, refetchAlerts]);
+
+  const handleRefresh = async () => {
+    try {
+      await Promise.all([refetchLoginAttempts(), refetchAlerts()]);
+      setLastRefresh(new Date());
+      toast.success('อัปเดตข้อมูลสำเร็จ');
+    } catch (error) {
+      toast.error('เกิดข้อผิดพลาดในการอัปเดตข้อมูล');
+    }
+  };
 
   const handleResolveAlert = async (alertId: string) => {
     try {
@@ -80,8 +103,26 @@ const SecurityDashboardTab: React.FC = () => {
   }
 
   const recentFailedAttempts = loginAttempts?.filter(attempt => !attempt.success).slice(0, 10) || [];
-  const activeAlerts = alerts?.filter(alert => !alert.resolved) || [];
-  const resolvedAlerts = alerts?.filter(alert => alert.resolved) || [];
+
+  // Robust check for active alerts
+  const isActive = (resolved: any) =>
+    resolved === false ||
+    resolved === null ||
+    resolved === undefined ||
+    resolved === 'false' ||
+    resolved === 0 ||
+    resolved === '0';
+
+  const activeAlerts = alerts?.filter(alert => isActive(alert.resolved)) || [];
+  const resolvedAlerts = alerts?.filter(alert => !isActive(alert.resolved)) || [];
+
+  console.log('Security Dashboard Data:', {
+    loginAttempts: loginAttempts?.length || 0,
+    recentFailedAttempts: recentFailedAttempts.length,
+    alerts: alerts?.length || 0,
+    activeAlerts: activeAlerts.length,
+    settings: settings
+  });
 
   return (
     <div className="space-y-6">
@@ -89,7 +130,14 @@ const SecurityDashboardTab: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Security Dashboard</h2>
           <p className="text-gray-600">ระบบความปลอดภัยและการตรวจสอบ</p>
+          <p className="text-xs text-gray-500">
+            อัปเดตล่าสุด: {lastRefresh.toLocaleTimeString('th-TH')}
+          </p>
         </div>
+        <Button onClick={handleRefresh} variant="outline" size="sm">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          อัปเดต
+        </Button>
       </div>
 
       {/* Security Overview Cards */}

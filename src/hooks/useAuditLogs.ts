@@ -20,6 +20,11 @@ export const useCreateAuditLog = () => {
 
   return useMutation({
     mutationFn: async (data: CreateAuditLogData) => {
+      // Log the payload for debugging
+      console.log('Audit log insert payload:', data);
+      if (!data.action || typeof data.action !== 'string' || data.action.trim() === '') {
+        throw new Error('Audit log must have a non-empty action string');
+      }
       const { data: auditLog, error } = await supabase
         .from('audit_logs')
         .insert({

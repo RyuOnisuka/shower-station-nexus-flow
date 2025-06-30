@@ -9,3 +9,30 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+// Log session ก่อน insert audit log
+supabase.auth.getSession().then(({ data, error }) => {
+  console.log('Supabase session:', data?.session);
+  if (error) {
+    console.error('Error getting session:', error);
+  }
+  if (!data.success) {
+    if (failedCount >= 3) {
+      const severity = failedCount >= 5 ? 'high' : 'medium';
+      supabase
+        .from('security_alerts')
+        .insert({
+          type: 'failed_login',
+          severity: severity,
+          message: `Multiple failed login attempts detected for user: ${data.username}`,
+          details: {
+            username: data.username,
+            ip_address: data.ip_address,
+            failed_attempts: failedCount,
+            time_window: '10 minutes',
+            last_attempt: new Date().toISOString()
+          }
+        });
+    }
+  }
+});

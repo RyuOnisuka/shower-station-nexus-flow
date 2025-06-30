@@ -52,7 +52,7 @@ export const useSecuritySettings = () => {
         .single();
 
       if (error) throw error;
-      return data?.settings as SecuritySettings || getDefaultSecuritySettings();
+      return (data?.settings as unknown as SecuritySettings) || getDefaultSecuritySettings();
     }
   });
 
@@ -61,6 +61,9 @@ export const useSecuritySettings = () => {
       const { data, error } = await supabase
         .from('system_settings')
         .upsert({
+          setting_key: 'security_settings',
+          setting_value: 'default',
+          description: 'Security configuration settings',
           category: 'security',
           settings: { ...settings, ...newSettings },
           updated_at: new Date().toISOString()
@@ -130,7 +133,7 @@ export const useLoginAttempts = (filters?: {
 export const useSecurityAlerts = () => {
   const queryClient = useQueryClient();
 
-  const { data: alerts, isLoading } = useQuery({
+  const { data: alerts, isLoading, refetch } = useQuery({
     queryKey: ['security_alerts'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -164,7 +167,8 @@ export const useSecurityAlerts = () => {
   return {
     alerts,
     isLoading,
-    resolveAlert
+    resolveAlert,
+    refetch
   };
 };
 
@@ -244,27 +248,39 @@ export const validatePassword = (password: string, policy: SecuritySettings['pas
 
 export const checkLoginAttempts = async (username: string, ip: string): Promise<{ blocked: boolean; remainingAttempts: number }> => {
   try {
-    const settings = await supabase
+    // ดึง security settings
+    const { data: settingsData } = await supabase
       .from('system_settings')
       .select('settings')
       .eq('category', 'security')
       .single();
 
-    const securitySettings = settings.data?.settings || getDefaultSecuritySettings();
-    const lockoutTime = new Date(Date.now() - securitySettings.lockout_duration * 60 * 1000);
+    const securitySettings = (settingsData?.settings as unknown as SecuritySettings) || getDefaultSecuritySettings();
+    const maxAttempts = securitySettings.max_login_attempts || 5;
+    const lockoutDuration = securitySettings.lockout_duration || 30; // นาที
+    
+    // คำนวณเวลาที่ lockout เริ่มต้น
+    const lockoutTime = new Date(Date.now() - lockoutDuration * 60 * 1000);
 
     // นับ failed attempts ในช่วง lockout duration
-    const { data: failedAttempts } = await supabase
+    const { data: failedAttempts, error } = await supabase
       .from('login_attempts')
       .select('*')
       .eq('username', username)
-      .eq('ip_address', ip)
       .eq('success', false)
-      .gte('created_at', lockoutTime.toISOString());
+      .gte('created_at', lockoutTime.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error checking login attempts:', error);
+      return { blocked: false, remainingAttempts: maxAttempts };
+    }
 
     const failedCount = failedAttempts?.length || 0;
-    const remainingAttempts = Math.max(0, securitySettings.max_login_attempts - failedCount);
-    const blocked = failedCount >= securitySettings.max_login_attempts;
+    const remainingAttempts = Math.max(0, maxAttempts - failedCount);
+    const blocked = failedCount >= maxAttempts;
+
+    console.log(`Login attempts for ${username}: failed=${failedCount}, remaining=${remainingAttempts}, blocked=${blocked}`);
 
     return { blocked, remainingAttempts };
   } catch (error) {
@@ -280,8 +296,10 @@ export const recordLoginAttempt = async (data: {
   success: boolean;
 }) => {
   try {
+    console.log(`Recording login attempt: ${data.username}, success: ${data.success}`);
+    
     // บันทึก login attempt
-    await supabase
+    const { error: insertError } = await supabase
       .from('login_attempts')
       .insert({
         username: data.username,
@@ -290,30 +308,50 @@ export const recordLoginAttempt = async (data: {
         success: data.success
       });
 
-    // ตรวจสอบ suspicious activity
+    if (insertError) {
+      console.error('Error inserting login attempt:', insertError);
+      return;
+    }
+
+    console.log(`Successfully recorded login attempt for ${data.username}`);
+
+    // ตรวจสอบ suspicious activity สำหรับ failed attempts
     if (!data.success) {
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+      
       const { data: recentAttempts } = await supabase
         .from('login_attempts')
         .select('*')
         .eq('username', data.username)
         .eq('success', false)
-        .gte('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString()); // 10 นาที
+        .gte('created_at', tenMinutesAgo.toISOString());
 
-      if (recentAttempts && recentAttempts.length >= 3) {
-        // สร้าง security alert
-        await supabase
+      const failedCount = recentAttempts?.length || 0;
+      
+      // สร้าง security alert ถ้ามี failed attempts มากกว่า 3 ครั้ง
+      if (failedCount >= 3) {
+        const severity = failedCount >= 5 ? 'high' : 'medium';
+        
+        const { error: alertError } = await supabase
           .from('security_alerts')
           .insert({
             type: 'failed_login',
-            severity: recentAttempts.length >= 5 ? 'high' : 'medium',
-            message: `Multiple failed login attempts for user: ${data.username}`,
+            severity: severity,
+            message: `Multiple failed login attempts detected for user: ${data.username}`,
             details: {
               username: data.username,
               ip_address: data.ip_address,
-              failed_attempts: recentAttempts.length,
-              time_window: '10 minutes'
+              failed_attempts: failedCount,
+              time_window: '10 minutes',
+              last_attempt: new Date().toISOString()
             }
           });
+
+        if (alertError) {
+          console.error('Error creating security alert:', alertError);
+        } else {
+          console.log(`Created security alert for ${data.username}: ${failedCount} failed attempts`);
+        }
       }
     }
   } catch (error) {

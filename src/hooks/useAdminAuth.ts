@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { recordLoginAttempt } from './useSecurity';
 import type { Database } from '@/integrations/supabase/types';
 
 type AdminUser = Database['public']['Tables']['admin_users']['Row'];
@@ -71,6 +72,8 @@ export const useAdminAuth = () => {
 
   const login = async (loginData: AdminLoginData): Promise<{ success: boolean; message: string; adminUser?: AdminUser }> => {
     try {
+      console.log(`Attempting login for username: ${loginData.username}`);
+      
       // ตรวจสอบ username และ password
       const { data: adminUser, error } = await supabase
         .from('admin_users')
@@ -79,49 +82,82 @@ export const useAdminAuth = () => {
         .eq('is_active', true)
         .single();
 
+      let loginSuccess = false;
+      let loginMessage = '';
+
       if (error || !adminUser) {
-        return { success: false, message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
+        loginSuccess = false;
+        loginMessage = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+        console.log(`Login failed: User not found or inactive`);
+      } else {
+        // ตรวจสอบ password (ในที่นี้ใช้ dummy check)
+        // ในระบบจริงควรใช้ bcrypt หรือ argon2
+        // ใช้ username เป็น password สำหรับ demo
+        if (loginData.password !== loginData.username) {
+          loginSuccess = false;
+          loginMessage = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+          console.log(`Login failed: Password mismatch`);
+        } else {
+          loginSuccess = true;
+          loginMessage = 'เข้าสู่ระบบสำเร็จ';
+          console.log(`Login successful for user: ${adminUser.username}`);
+        }
       }
 
-      // ตรวจสอบ password (ในที่นี้ใช้ dummy check)
-      // ในระบบจริงควรใช้ bcrypt หรือ argon2
-      // ใช้ username เป็น password สำหรับ demo
-      if (loginData.password !== loginData.username) {
-        return { success: false, message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
+      // บันทึก login attempt
+      await recordLoginAttempt({
+        username: loginData.username,
+        ip_address: '127.0.0.1',
+        user_agent: navigator.userAgent,
+        success: loginSuccess
+      });
+
+      if (loginSuccess && adminUser) {
+        // สร้าง session token
+        const sessionToken = `admin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 ชั่วโมง
+
+        // บันทึก session
+        const { error: sessionError } = await supabase
+          .from('admin_sessions')
+          .insert({
+            admin_user_id: adminUser.id,
+            session_token: sessionToken,
+            expires_at: expiresAt
+          });
+
+        if (sessionError) {
+          console.error('Session creation error:', sessionError);
+          return { success: false, message: 'เกิดข้อผิดพลาดในการสร้าง session' };
+        }
+
+        // อัปเดต last_login
+        await supabase
+          .from('admin_users')
+          .update({ last_login: new Date().toISOString() })
+          .eq('id', adminUser.id);
+
+        // บันทึก session token ใน localStorage
+        localStorage.setItem('adminSessionToken', sessionToken);
+
+        setIsAuthenticated(true);
+        setAdminUser(adminUser);
+
+        return { success: true, message: loginMessage, adminUser };
+      } else {
+        return { success: false, message: loginMessage };
       }
-
-      // สร้าง session token
-      const sessionToken = `admin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 ชั่วโมง
-
-      // บันทึก session
-      const { error: sessionError } = await supabase
-        .from('admin_sessions')
-        .insert({
-          admin_user_id: adminUser.id,
-          session_token: sessionToken,
-          expires_at: expiresAt
-        });
-
-      if (sessionError) {
-        return { success: false, message: 'เกิดข้อผิดพลาดในการสร้าง session' };
-      }
-
-      // อัปเดต last_login
-      await supabase
-        .from('admin_users')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', adminUser.id);
-
-      // บันทึก session token ใน localStorage
-      localStorage.setItem('adminSessionToken', sessionToken);
-
-      setIsAuthenticated(true);
-      setAdminUser(adminUser);
-
-      return { success: true, message: 'เข้าสู่ระบบสำเร็จ', adminUser };
     } catch (error) {
       console.error('Login error:', error);
+      
+      // บันทึก login attempt สำหรับ error case
+      await recordLoginAttempt({
+        username: loginData.username,
+        ip_address: '127.0.0.1',
+        user_agent: navigator.userAgent,
+        success: false
+      });
+      
       return { success: false, message: 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ' };
     }
   };

@@ -164,7 +164,7 @@ const AuditLogsTab: React.FC = () => {
                   <SelectValue placeholder="เลือก Action" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">ทั้งหมด</SelectItem>
+                  <SelectItem value="all">ทั้งหมด</SelectItem>
                   <SelectItem value="login">Login</SelectItem>
                   <SelectItem value="logout">Logout</SelectItem>
                   <SelectItem value="create">Create</SelectItem>
@@ -183,7 +183,7 @@ const AuditLogsTab: React.FC = () => {
                   <SelectValue placeholder="เลือก Table" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">ทั้งหมด</SelectItem>
+                  <SelectItem value="all">ทั้งหมด</SelectItem>
                   <SelectItem value="queues">Queues</SelectItem>
                   <SelectItem value="lockers">Lockers</SelectItem>
                   <SelectItem value="users">Users</SelectItem>
