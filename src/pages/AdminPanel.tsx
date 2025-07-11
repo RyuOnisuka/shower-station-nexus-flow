@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, LogOut, User, Shield, Settings, FileText, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, RefreshCw, LogOut, User, Shield, Settings, FileText, AlertTriangle, Download, Upload } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
   useQueues, 
@@ -18,6 +18,9 @@ import {
 } from '@/hooks/useDatabase';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { createAuditLog } from '@/hooks/useAuditLogs';
+import { useMonitoring } from '@/hooks/useMonitoring';
+import { useRateLimit } from '@/utils/rateLimiter';
+import { useBackup } from '@/utils/backup';
 import { supabase } from '@/integrations/supabase/client';
 import { QueueManagementTab } from '@/components/admin/QueueManagementTab';
 import { PaymentManagementTab } from '@/components/admin/PaymentManagementTab';
@@ -36,8 +39,12 @@ const AdminPanel = () => {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const defaultTab = searchParams.get('tab') || 'queues';
+  const [isBackupLoading, setIsBackupLoading] = useState(false);
   
   const { adminUser, logout, hasPermission } = useAdminAuth();
+  const { logAction, logError } = useMonitoring();
+  const { checkRateLimit } = useRateLimit('adminAction');
+  const { createBackup, restoreBackup } = useBackup();
   
   const { data: queues, isLoading: queuesLoading, refetch: refetchQueues } = useQueues();
   const { data: lockers, isLoading: lockersLoading, refetch: refetchLockers } = useLockers();
@@ -60,8 +67,75 @@ const AdminPanel = () => {
     };
   }) || [];
 
+  const handleCreateBackup = async () => {
+    try {
+      setIsBackupLoading(true);
+      logAction('admin_create_backup', { adminUserId: adminUser?.id });
+      
+      const backupData = await createBackup();
+      
+      // Create download link
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `shower-station-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('สร้างไฟล์ backup สำเร็จ');
+    } catch (error) {
+      logError(error instanceof Error ? error : new Error('Failed to create backup'));
+      toast.error('เกิดข้อผิดพลาดในการสร้าง backup');
+    } finally {
+      setIsBackupLoading(false);
+    }
+  };
+
+  const handleRestoreBackup = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsBackupLoading(true);
+      logAction('admin_restore_backup', { adminUserId: adminUser?.id });
+      
+      const text = await file.text();
+      const backupData = JSON.parse(text);
+      
+      await restoreBackup('temp-backup-id', { overwrite: true, validate: true });
+      
+      // Refresh all data
+      await Promise.all([
+        refetchQueues(),
+        refetchLockers(),
+        refetchStats()
+      ]);
+      
+      toast.success('กู้คืนข้อมูลสำเร็จ');
+    } catch (error) {
+      logError(error instanceof Error ? error : new Error('Failed to restore backup'));
+      toast.error('เกิดข้อผิดพลาดในการกู้คืนข้อมูล');
+    } finally {
+      setIsBackupLoading(false);
+      // Clear file input
+      event.target.value = '';
+    }
+  };
+
   const handleCallQueue = async (queueId: string) => {
     try {
+      // Check rate limit
+      const rateLimitResult = checkRateLimit(adminUser?.id || 'anonymous');
+      if (!rateLimitResult.allowed) {
+        toast.error(`กรุณารอ ${rateLimitResult.retryAfter} วินาทีก่อนลองใหม่`);
+        return;
+      }
+
+      logAction('admin_call_queue', { queueId, adminUserId: adminUser?.id });
+      
       await updateQueueMutation.mutateAsync({
         queueId,
         status: 'called'
@@ -81,12 +155,22 @@ const AdminPanel = () => {
       
       toast.success('เรียกคิวสำเร็จ');
     } catch (error) {
+      logError(error instanceof Error ? error : new Error('Failed to call queue'));
       toast.error('เกิดข้อผิดพลาด');
     }
   };
 
   const handleStartService = async (queueId: string) => {
     try {
+      // Check rate limit
+      const rateLimitResult = checkRateLimit(adminUser?.id || 'anonymous');
+      if (!rateLimitResult.allowed) {
+        toast.error(`กรุณารอ ${rateLimitResult.retryAfter} วินาทีก่อนลองใหม่`);
+        return;
+      }
+
+      logAction('admin_start_service', { queueId, adminUserId: adminUser?.id });
+      
       await updateQueueMutation.mutateAsync({
         queueId,
         status: 'processing'
@@ -107,12 +191,22 @@ const AdminPanel = () => {
       
       toast.success('เริ่มบริการสำเร็จ');
     } catch (error) {
+      logError(error instanceof Error ? error : new Error('Failed to start service'));
       toast.error('เกิดข้อผิดพลาด');
     }
   };
 
   const handleCompleteService = async (queueId: string) => {
     try {
+      // Check rate limit
+      const rateLimitResult = checkRateLimit(adminUser?.id || 'anonymous');
+      if (!rateLimitResult.allowed) {
+        toast.error(`กรุณารอ ${rateLimitResult.retryAfter} วินาทีก่อนลองใหม่`);
+        return;
+      }
+
+      logAction('admin_complete_service', { queueId, adminUserId: adminUser?.id });
+
       // Get queue info (for locker_number)
       const { data: queue } = await supabase
         .from('queues')
@@ -169,12 +263,22 @@ const AdminPanel = () => {
       toast.success('คืนตู้ล็อกเกอร์และจบการใช้บริการสำเร็จ');
     } catch (error) {
       console.error('Complete service error:', error);
+      logError(error instanceof Error ? error : new Error('Failed to complete service'));
       toast.error('เกิดข้อผิดพลาด');
     }
   };
 
   const handleApprovePayment = async (queueId: string) => {
     try {
+      // Check rate limit
+      const rateLimitResult = checkRateLimit(adminUser?.id || 'anonymous');
+      if (!rateLimitResult.allowed) {
+        toast.error(`กรุณารอ ${rateLimitResult.retryAfter} วินาทีก่อนลองใหม่`);
+        return;
+      }
+
+      logAction('admin_approve_payment', { queueId, adminUserId: adminUser?.id });
+
       // Update payment status
       const { error: paymentError } = await supabase
         .from('payments')
@@ -199,390 +303,320 @@ const AdminPanel = () => {
 
       if (!queue) throw new Error('Queue not found');
 
-      // Determine gender for locker assignment
-      let gender = 'unisex';
-      if (queue.user?.gender === 'male') {
-        gender = 'male';
-      } else if (queue.user?.gender === 'female') {
-        gender = 'female';
-      } else if (queue.user?.restroom_pref === 'male') {
-        gender = 'male';
-      } else if (queue.user?.restroom_pref === 'female') {
-        gender = 'female';
-      }
-
-      // Find available locker by gender (ML = male, FL = female)
-      const lockerPrefix = gender === 'male' ? 'ML' : gender === 'female' ? 'FL' : null;
-      if (!lockerPrefix) {
-        toast.error('ไม่สามารถระบุประเภทตู้ล็อกเกอร์ได้');
-        return;
-      }
-      const { data: availableLockers } = await supabase
+      // Auto-assign locker if available
+      const { data: availableLocker } = await supabase
         .from('lockers')
         .select('*')
         .eq('status', 'available')
-        .like('locker_number', `${lockerPrefix}%`)
-        .order('locker_number');
+        .eq('gender', queue.user?.gender || 'male')
+        .limit(1)
+        .single();
 
-      if (!availableLockers || availableLockers.length === 0) {
-        // ไม่มี locker ว่าง - เปลี่ยนสถานะ queue กลับเป็น 'called' และแจ้งเตือน
-        const { error: queueError } = await supabase
+      if (availableLocker) {
+        // Assign locker to user
+        const { error: lockerUpdateError } = await supabase
+          .from('lockers')
+          .update({
+            status: 'occupied',
+            user_id: queue.user_id,
+            current_queue_id: queueId,
+            assigned_at: new Date().toISOString()
+          })
+          .eq('id', availableLocker.id);
+
+        if (lockerUpdateError) throw lockerUpdateError;
+
+        // Update queue with locker number
+        const { error: queueUpdateError } = await supabase
           .from('queues')
           .update({
-            status: 'called'
+            locker_number: availableLocker.locker_number
           })
           .eq('id', queueId);
 
-        if (queueError) throw queueError;
-        
-        await refetchQueues();
-        await refetchLockers();
-        await refetchStats();
-        queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
-        
-        // สร้าง audit log
-        await createAuditLog({
-          action: 'approve_payment_no_locker',
-          table_name: 'payments',
-          record_id: queueId,
-          new_values: { status: 'approved' },
-          ip_address: '127.0.0.1',
-          user_agent: navigator.userAgent
-        });
-        
-        toast.error('อนุมัติการชำระเงินแล้ว แต่ไม่มีตู้ล็อกเกอร์ว่าง กรุณารอตู้ล็อกเกอร์ว่างก่อนเริ่มบริการ');
-        return;
+        if (queueUpdateError) throw queueUpdateError;
+
+        toast.success(`อนุมัติการชำระเงินและมอบหมายตู้ล็อกเกอร์ ${availableLocker.locker_number} สำเร็จ`);
+      } else {
+        toast.success('อนุมัติการชำระเงินสำเร็จ (ไม่มีตู้ล็อกเกอร์ว่าง)');
       }
 
-      const selectedLocker = availableLockers[0];
-
-      // Assign locker to user/queue
-      const { error: lockerError } = await supabase
-        .from('lockers')
-        .update({
-          status: 'occupied',
-          user_id: queue.user_id,
-          current_queue_id: queueId,
-          occupied_at: new Date().toISOString(),
-          released_at: null
-        })
-        .eq('id', selectedLocker.id);
-
-      if (lockerError) throw lockerError;
-
-      // Update queue with locker number
-      const { error: queueError } = await supabase
-        .from('queues')
-        .update({
-          locker_number: selectedLocker.locker_number,
-          status: 'processing'
-        })
-        .eq('id', queueId);
-
-      if (queueError) throw queueError;
-      
       await refetchQueues();
       await refetchLockers();
-      await refetchStats();
-      queryClient.invalidateQueries({ queryKey: ['daily_stats'] });
       
-      // สร้าง audit log
-      await createAuditLog({
-        action: 'approve_payment_assign_locker',
-        table_name: 'payments',
-        record_id: queueId,
-        new_values: { 
-          status: 'approved',
-          locker_number: selectedLocker.locker_number,
-          queue_status: 'processing'
-        },
-        ip_address: '127.0.0.1',
-        user_agent: navigator.userAgent
-      });
-      
-      toast.success('อนุมัติการชำระเงินและมอบหมายตู้ล็อกเกอร์สำเร็จ');
     } catch (error) {
-      console.error('Payment approval error:', error);
+      console.error('Approve payment error:', error);
+      logError(error instanceof Error ? error : new Error('Failed to approve payment'));
       toast.error('เกิดข้อผิดพลาด');
     }
   };
 
   const handleApproveUser = async (userId: string) => {
     try {
+      // Check rate limit
+      const rateLimitResult = checkRateLimit(adminUser?.id || 'anonymous');
+      if (!rateLimitResult.allowed) {
+        toast.error(`กรุณารอ ${rateLimitResult.retryAfter} วินาทีก่อนลองใหม่`);
+        return;
+      }
+
+      logAction('admin_approve_user', { userId, adminUserId: adminUser?.id });
+      
       await approveUserMutation.mutateAsync(userId);
-      
-      // สร้าง audit log
-      await createAuditLog({
-        action: 'approve_user',
-        table_name: 'users',
-        record_id: userId,
-        new_values: { status: 'active' },
-        ip_address: '127.0.0.1',
-        user_agent: navigator.userAgent
-      });
-      
-      toast.success('อนุมัติสมาชิกสำเร็จ');
+      toast.success('อนุมัติผู้ใช้สำเร็จ');
     } catch (error) {
+      logError(error instanceof Error ? error : new Error('Failed to approve user'));
       toast.error('เกิดข้อผิดพลาด');
     }
   };
 
   const handleRejectUser = async (userId: string) => {
     try {
+      // Check rate limit
+      const rateLimitResult = checkRateLimit(adminUser?.id || 'anonymous');
+      if (!rateLimitResult.allowed) {
+        toast.error(`กรุณารอ ${rateLimitResult.retryAfter} วินาทีก่อนลองใหม่`);
+        return;
+      }
+
+      logAction('admin_reject_user', { userId, adminUserId: adminUser?.id });
+      
       await rejectUserMutation.mutateAsync(userId);
-      
-      // สร้าง audit log
-      await createAuditLog({
-        action: 'reject_user',
-        table_name: 'users',
-        record_id: userId,
-        new_values: { status: 'rejected' },
-        ip_address: '127.0.0.1',
-        user_agent: navigator.userAgent
-      });
-      
-      toast.success('ปฏิเสธสมาชิกสำเร็จ');
+      toast.success('ปฏิเสธผู้ใช้สำเร็จ');
     } catch (error) {
+      logError(error instanceof Error ? error : new Error('Failed to reject user'));
       toast.error('เกิดข้อผิดพลาด');
     }
   };
 
   const handleAutoAssignLocker = async () => {
     try {
-      const result = await autoAssignLockerMutation.mutateAsync();
-      
-      // สร้าง audit log
-      await createAuditLog({
-        action: 'auto_assign_locker',
-        table_name: 'lockers',
-        new_values: { 
-          assigned_count: result.assigned,
-          results: result.results
-        },
-        ip_address: '127.0.0.1',
-        user_agent: navigator.userAgent
-      });
-      
-      if (result.assigned > 0) {
-        toast.success(result.message);
-        // แสดงรายละเอียดการมอบหมาย
-        result.results.forEach((item: any) => {
-          toast.success(`คิว ${item.queueNumber} (${item.userName}) → ตู้ ${item.lockerNumber}`);
-        });
-      } else {
-        toast.info(result.message);
+      // Check rate limit
+      const rateLimitResult = checkRateLimit(adminUser?.id || 'anonymous');
+      if (!rateLimitResult.allowed) {
+        toast.error(`กรุณารอ ${rateLimitResult.retryAfter} วินาทีก่อนลองใหม่`);
+        return;
       }
+
+      logAction('admin_auto_assign_locker', { adminUserId: adminUser?.id });
+      
+      await autoAssignLockerMutation.mutateAsync();
+      await refetchQueues();
+      await refetchLockers();
+      toast.success('มอบหมายตู้ล็อกเกอร์อัตโนมัติสำเร็จ');
     } catch (error) {
-      console.error('Auto assign locker error:', error);
-      toast.error('เกิดข้อผิดพลาดในการมอบหมาย locker อัตโนมัติ');
+      logError(error instanceof Error ? error : new Error('Failed to auto assign locker'));
+      toast.error('เกิดข้อผิดพลาด');
     }
   };
 
   const handleLogout = async () => {
     try {
+      logAction('admin_logout', { adminUserId: adminUser?.id });
       await logout();
-      
-      // สร้าง audit log
-      await createAuditLog({
-        action: 'admin_logout',
-        table_name: 'admin_sessions',
-        new_values: { admin_user: adminUser?.username },
-        ip_address: '127.0.0.1',
-        user_agent: navigator.userAgent
-      });
-      
-      toast.success('ออกจากระบบสำเร็จ');
       navigate('/admin-login');
     } catch (error) {
+      logError(error instanceof Error ? error : new Error('Failed to logout'));
       toast.error('เกิดข้อผิดพลาดในการออกจากระบบ');
     }
   };
 
-  const activeQueues = queues?.filter(q => 
-    ['waiting', 'called', 'payment_pending', 'processing'].includes(q.status)
-  ) || [];
+  const handleRefresh = async () => {
+    try {
+      logAction('admin_refresh_data', { adminUserId: adminUser?.id });
+      await Promise.all([
+        refetchQueues(),
+        refetchLockers(),
+        refetchStats()
+      ]);
+      toast.success('อัปเดตข้อมูลสำเร็จ');
+    } catch (error) {
+      logError(error instanceof Error ? error : new Error('Failed to refresh data'));
+      toast.error('เกิดข้อผิดพลาดในการอัปเดตข้อมูล');
+    }
+  };
 
-  const pendingPaymentQueues = queues?.filter(q => 
-    q.payment && q.payment.some((p: any) => p.status === 'pending')
-  ) || [];
-
-  const queueCount = activeQueues.length;
-  const paymentCount = pendingPaymentQueues.length;
-  const pendingUserCount = pendingUsers?.length || 0;
-
-  if (queuesLoading || lockersLoading || pendingUsersLoading) {
+  if (!adminUser) {
     return (
-      <div className="min-h-screen bg-[#FAF6EF] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#BFA14A]"></div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">กำลังโหลด...</h2>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF6EF] p-4">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard')}
-              className="border-none bg-transparent"
-            >
-              <span className="inline-flex items-center justify-center rounded-full p-1 hover:bg-[#F3EAD6]">
-                <ArrowLeft className="h-5 w-5 text-[#BFA14A]" />
-              </span>
-            </button>
-            <div className="flex flex-col items-center">
-              <div className="text-2xl mb-1" style={{ color: '#BFA14A' }}>🚿</div>
-              <span className="text-lg font-bold" style={{ color: '#BFA14A' }}>SHOWER STATION</span>
-            </div>
-            <h1 className="text-2xl font-bold text-[#BFA14A] ml-4">Admin Panel</h1>
-          </div>
-          <div className="flex items-center space-x-4">
-            {/* Admin User Info */}
-            {adminUser && (
-              <div className="flex items-center space-x-2 bg-white px-3 py-2 rounded-lg shadow-sm">
-                <User className="h-4 w-4 text-[#BFA14A]" />
-                <div className="text-sm">
-                  <span className="font-medium text-gray-700">{adminUser.username}</span>
-                  <span className="text-gray-500 ml-2">
-                    ({adminUser.role === 'super_admin' ? 'Super Admin' : 
-                      adminUser.role === 'admin' ? 'Admin' : 'Staff'})
-                  </span>
-                </div>
-              </div>
-            )}
-            
-            <div className="flex space-x-2">
-              <RoleBasedTab requiredRole="admin">
-                <button
-                  onClick={handleAutoAssignLocker}
-                  disabled={autoAssignLockerMutation.isPending}
-                  className="border border-green-600 text-green-600 rounded-md px-3 py-1 font-semibold hover:bg-green-600 hover:text-white transition disabled:opacity-50"
-                >
-                  {autoAssignLockerMutation.isPending ? 'กำลังมอบหมาย...' : 'Auto Assign Locker'}
-                </button>
-              </RoleBasedTab>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-4">
               <button
-                onClick={() => refetchQueues()}
-                className="border border-[#BFA14A] text-[#BFA14A] rounded-md px-3 py-1 font-semibold hover:bg-[#BFA14A] hover:text-white transition"
+                onClick={() => navigate('/')}
+                className="p-2 rounded-md hover:bg-gray-100"
               >
-                <RefreshCw className="h-4 w-4 mr-2 inline-block" />
-                รีเฟรช
+                <ArrowLeft className="h-5 w-5" />
               </button>
-              <button
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">Admin Panel</h1>
+                <p className="text-sm text-gray-500">
+                  ยินดีต้อนรับ {adminUser.username} ({adminUser.role})
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              {/* Backup/Restore buttons for admin users */}
+              {hasPermission('admin') && (
+                <>
+                  <Button
+                    onClick={handleCreateBackup}
+                    variant="outline"
+                    size="sm"
+                    disabled={isBackupLoading}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Backup
+                  </Button>
+                  
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleRestoreBackup}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      disabled={isBackupLoading}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isBackupLoading}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Restore
+                    </Button>
+                  </div>
+                </>
+              )}
+              
+              <Button
+                onClick={handleRefresh}
+                variant="outline"
+                size="sm"
+                disabled={queuesLoading || lockersLoading}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                อัปเดต
+              </Button>
+              
+              <Button
                 onClick={handleLogout}
-                className="border border-red-600 text-red-600 rounded-md px-3 py-1 font-semibold hover:bg-red-600 hover:text-white transition flex items-center"
+                variant="outline"
+                size="sm"
               >
                 <LogOut className="h-4 w-4 mr-2" />
                 ออกจากระบบ
-              </button>
+              </Button>
             </div>
           </div>
         </div>
+      </div>
 
-        <Tabs defaultValue={defaultTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-9 rounded-xl bg-[#F3EAD6]">
-            <TabsTrigger value="queues" className="text-[#BFA14A] flex items-center gap-1">
-              จัดการคิว
-              {queueCount > 0 && <Badge variant="secondary">{queueCount}</Badge>}
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Tabs value={defaultTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-8">
+            <TabsTrigger value="queues" className="flex items-center space-x-2">
+              <FileText className="h-4 w-4" />
+              <span className="hidden sm:inline">คิว</span>
             </TabsTrigger>
-            <TabsTrigger value="payments" className="text-[#BFA14A] flex items-center gap-1">
-              การชำระเงิน
-              {paymentCount > 0 && <Badge variant="secondary">{paymentCount}</Badge>}
+            <TabsTrigger value="payments" className="flex items-center space-x-2">
+              <FileText className="h-4 w-4" />
+              <span className="hidden sm:inline">การชำระเงิน</span>
             </TabsTrigger>
-            <TabsTrigger value="users" className="text-[#BFA14A] flex items-center gap-1">
-              อนุมัติสมาชิก
-              {pendingUserCount > 0 && <Badge variant="secondary">{pendingUserCount}</Badge>}
+            <TabsTrigger value="lockers" className="flex items-center space-x-2">
+              <FileText className="h-4 w-4" />
+              <span className="hidden sm:inline">ล็อกเกอร์</span>
             </TabsTrigger>
-            <TabsTrigger value="lockers" className="text-[#BFA14A]">ตู้ล็อกเกอร์</TabsTrigger>
-            <TabsTrigger value="stats" className="text-[#BFA14A]">สถิติ</TabsTrigger>
-            <RoleBasedTab requiredRole="admin">
-              <TabsTrigger value="security" className="text-[#BFA14A] flex items-center gap-1">
-                <AlertTriangle className="h-4 w-4" />
-                Security
-              </TabsTrigger>
-            </RoleBasedTab>
-            <RoleBasedTab requiredRole="admin">
-              <TabsTrigger value="audit-logs" className="text-[#BFA14A] flex items-center gap-1">
-                <FileText className="h-4 w-4" />
-                Audit Logs
-              </TabsTrigger>
-            </RoleBasedTab>
-            <RoleBasedTab requiredRole="super_admin">
-              <TabsTrigger value="admin-users" className="text-[#BFA14A] flex items-center gap-1">
-                <Shield className="h-4 w-4" />
-                จัดการแอดมิน
-              </TabsTrigger>
-            </RoleBasedTab>
-            <RoleBasedTab requiredRole="super_admin">
-              <TabsTrigger value="settings" className="text-[#BFA14A] flex items-center gap-1">
-                <Settings className="h-4 w-4" />
-                การตั้งค่า
-              </TabsTrigger>
-            </RoleBasedTab>
+            <TabsTrigger value="users" className="flex items-center space-x-2">
+              <User className="h-4 w-4" />
+              <span className="hidden sm:inline">ผู้ใช้</span>
+            </TabsTrigger>
+            <TabsTrigger value="stats" className="flex items-center space-x-2">
+              <FileText className="h-4 w-4" />
+              <span className="hidden sm:inline">สถิติ</span>
+            </TabsTrigger>
+            <TabsTrigger value="security" className="flex items-center space-x-2">
+              <Shield className="h-4 w-4" />
+              <span className="hidden sm:inline">ความปลอดภัย</span>
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="flex items-center space-x-2">
+              <Settings className="h-4 w-4" />
+              <span className="hidden sm:inline">ตั้งค่า</span>
+            </TabsTrigger>
+            <TabsTrigger value="audit" className="flex items-center space-x-2">
+              <AlertTriangle className="h-4 w-4" />
+              <span className="hidden sm:inline">Audit</span>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="queues">
             <QueueManagementTab
-              activeQueues={activeQueues}
+              activeQueues={queues?.filter(q => 
+                ['waiting', 'called', 'payment_pending', 'processing'].includes(q.status)
+              ) || []}
               lockers={enhancedLockers}
               onCallQueue={handleCallQueue}
               onStartService={handleStartService}
               onCompleteService={handleCompleteService}
-              isLoading={updateQueueMutation.isPending}
+              isLoading={queuesLoading}
             />
           </TabsContent>
 
           <TabsContent value="payments">
             <PaymentManagementTab
-              pendingPaymentQueues={pendingPaymentQueues}
+              pendingPaymentQueues={queues?.filter(q => 
+                q.payment && q.payment.some((p: any) => p.status === 'pending')
+              ) || []}
               onApprovePayment={handleApprovePayment}
-              isLoading={updateQueueMutation.isPending}
+              isLoading={false}
+            />
+          </TabsContent>
+
+          <TabsContent value="lockers">
+            <LockerManagementTab
+              lockers={enhancedLockers}
             />
           </TabsContent>
 
           <TabsContent value="users">
             <UserApprovalTab
               pendingUsers={pendingUsers || []}
+              isLoading={pendingUsersLoading}
               onApproveUser={handleApproveUser}
               onRejectUser={handleRejectUser}
-              isLoading={approveUserMutation.isPending || rejectUserMutation.isPending}
             />
           </TabsContent>
 
-          <TabsContent value="lockers">
-            <LockerManagementTab lockers={enhancedLockers} />
-          </TabsContent>
-
           <TabsContent value="stats">
-            <StatisticsTab dailyStats={dailyStats || []} />
+            <StatisticsTab
+              dailyStats={dailyStats}
+            />
           </TabsContent>
 
-          <RoleBasedTab requiredRole="admin">
-            <TabsContent value="security">
-              <SecurityDashboardTab />
-            </TabsContent>
-          </RoleBasedTab>
+          <TabsContent value="security">
+            <SecurityDashboardTab />
+          </TabsContent>
 
-          <RoleBasedTab requiredRole="admin">
-            <TabsContent value="audit-logs">
-              <AuditLogsTab />
-            </TabsContent>
-          </RoleBasedTab>
+          <TabsContent value="settings">
+            <SystemSettingsTab />
+          </TabsContent>
 
-          <RoleBasedTab requiredRole="super_admin">
-            <TabsContent value="admin-users">
-              <AdminUserManagementTab />
-            </TabsContent>
-          </RoleBasedTab>
-
-          <RoleBasedTab requiredRole="super_admin">
-            <TabsContent value="settings">
-              <SystemSettingsTab />
-            </TabsContent>
-          </RoleBasedTab>
+          <TabsContent value="audit">
+            <AuditLogsTab />
+          </TabsContent>
         </Tabs>
       </div>
     </div>
