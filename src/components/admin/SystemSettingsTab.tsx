@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Settings, Clock, DollarSign, Users, Wrench, Save } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useSecuritySettings } from '@/hooks/useSecurity';
 
 interface SystemSetting {
   id: string;
@@ -30,6 +31,7 @@ const SystemSettingsTab: React.FC = () => {
     setting_value: '',
     description: ''
   });
+  const { settings: securitySettings, updateSecuritySettings } = useSecuritySettings();
 
   useEffect(() => {
     loadSettings();
@@ -64,8 +66,14 @@ const SystemSettingsTab: React.FC = () => {
 
       if (error) throw error;
       
+      if (setting.setting_key === 'max_login_attempts') {
+        await updateSecuritySettings.mutateAsync({
+          max_login_attempts: Number(newValue)
+        });
+      }
+      
+      await loadSettings();
       toast.success('บันทึกการตั้งค่าสำเร็จ');
-      loadSettings();
     } catch (error) {
       console.error('Error saving setting:', error);
       toast.error('เกิดข้อผิดพลาดในการบันทึกการตั้งค่า');
@@ -92,7 +100,7 @@ const SystemSettingsTab: React.FC = () => {
       setIsEditDialogOpen(false);
       setEditingSetting(null);
       setFormData({ setting_key: '', setting_value: '', description: '' });
-      loadSettings();
+      await loadSettings();
     } catch (error) {
       console.error('Error updating setting:', error);
       toast.error('เกิดข้อผิดพลาดในการอัปเดตการตั้งค่า');
