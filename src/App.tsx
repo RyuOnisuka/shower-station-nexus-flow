@@ -59,26 +59,26 @@ const AppContent = () => {
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/service-selection" element={<ServiceSelection />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/upload-slip" element={<UploadSlip />} />
-          <Route path="/payment-success" element={<PaymentSuccess />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/admin-login" element={<AdminLogin />} />
-          <Route path="/admin" element={
-            <ProtectedAdminRoute requiredRole="staff">
-              <AdminPanel />
-            </ProtectedAdminRoute>
-          } />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      {/* <BrowserRouter> removed, now provided in main.tsx */}
+      <Routes>
+        <Route path="/" element={<Index />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/service-selection" element={<ServiceSelection />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/upload-slip" element={<UploadSlip />} />
+        <Route path="/payment-success" element={<PaymentSuccess />} />
+        <Route path="/history" element={<History />} />
+        <Route path="/admin-login" element={<AdminLogin />} />
+        <Route path="/admin" element={
+          <ProtectedAdminRoute requiredRole="staff">
+            <AdminPanel />
+          </ProtectedAdminRoute>
+        } />
+        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+      {/* </BrowserRouter> removed */}
     </TooltipProvider>
   );
 };

@@ -16,23 +16,5 @@ supabase.auth.getSession().then(({ data, error }) => {
   if (error) {
     console.error('Error getting session:', error);
   }
-  if (!data.success) {
-    if (failedCount >= 3) {
-      const severity = failedCount >= 5 ? 'high' : 'medium';
-      supabase
-        .from('security_alerts')
-        .insert({
-          type: 'failed_login',
-          severity: severity,
-          message: `Multiple failed login attempts detected for user: ${data.username}`,
-          details: {
-            username: data.username,
-            ip_address: data.ip_address,
-            failed_attempts: failedCount,
-            time_window: '10 minutes',
-            last_attempt: new Date().toISOString()
-          }
-        });
-    }
-  }
+  // ลบ logic ที่ใช้ failedCount ออก เพราะไม่ควรอยู่ที่นี่
 });

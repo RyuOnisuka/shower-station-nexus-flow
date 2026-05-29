@@ -37,7 +37,7 @@ import { Badge } from '@/components/ui/badge';
 const AdminPanel = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const defaultTab = searchParams.get('tab') || 'queues';
   const [isBackupLoading, setIsBackupLoading] = useState(false);
   
@@ -304,13 +304,18 @@ const AdminPanel = () => {
       if (!queue) throw new Error('Queue not found');
 
       // Auto-assign locker if available
-      const { data: availableLocker } = await supabase
+      const gender = queue.user?.gender || 'male';
+      const lockerPrefix = gender === 'male' ? 'ML' : gender === 'female' ? 'FL' : 'ML';
+
+      const { data: availableLockers } = await supabase
         .from('lockers')
         .select('*')
         .eq('status', 'available')
-        .eq('gender', queue.user?.gender || 'male')
-        .limit(1)
-        .single();
+        .like('locker_number', `${lockerPrefix}%`)
+        .order('locker_number')
+        .limit(1);
+
+      const availableLocker = availableLockers && availableLockers.length > 0 ? availableLockers[0] : null;
 
       if (availableLocker) {
         // Assign locker to user
@@ -526,7 +531,7 @@ const AdminPanel = () => {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Tabs value={defaultTab} className="space-y-6">
+        <Tabs value={defaultTab} onValueChange={(value) => setSearchParams({ tab: value })} className="space-y-6">
           <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="queues" className="flex items-center space-x-2">
               <FileText className="h-4 w-4" />
